@@ -1,0 +1,8 @@
+{
+  "name": "mowon-guide",
+  "version": "1.0.0",
+  "description": "민원 길잡이 — 전국 통합데이터 서비스",
+  "engines": {
+    "node": ">=18"
+  }
+}

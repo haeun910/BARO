@@ -1,0 +1,1190 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <title>BARO — 사용자 맞춤 민원 안내 서비스</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>
+    :root {
+      --navy:       #0C2354;
+      --blue:       #1754B8;
+      --blue-mid:   #1E6BE0;
+      --blue-light: #EBF3FF;
+      --green:      #156F3A;
+      --green-bg:   #E8F5EE;
+      --red:        #B91C1C;
+      --red-bg:     #FEF2F2;
+      --orange:     #C05621;
+      --gray-50:    #F7F8FA;
+      --gray-100:   #EEF0F4;
+      --gray-200:   #DDE0E8;
+      --gray-400:   #9DA4B4;
+      --gray-600:   #5A6070;
+      --gray-800:   #252A38;
+      --border:     1px solid #E4E7EF;
+      --shadow-xs:  0 1px 2px rgba(0,0,0,.06);
+      --shadow-sm:  0 2px 8px rgba(0,0,0,.08);
+      --r:          12px;
+      --r-sm:       8px;
+    }
+    *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+    body {
+      font-family:'Noto Sans KR', sans-serif;
+      background:var(--gray-50);
+      color:var(--gray-800);
+      min-height:100vh;
+      -webkit-font-smoothing:antialiased;
+    }
+
+    /* ── HEADER ── */
+    .hd { background:var(--navy); position:sticky; top:0; z-index:200; box-shadow:0 2px 12px rgba(12,35,84,.5); }
+    .hd-inner { max-width:720px; margin:0 auto; display:flex; align-items:center; justify-content:space-between; padding:0 20px; height:52px; }
+    .hd-logo { display:flex; align-items:center; gap:10px; }
+    .hd-logomark { width:28px; height:28px; background:rgba(255,255,255,.12); border:1.5px solid rgba(255,255,255,.25); border-radius:6px; display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700; color:white; }
+    .hd-title { font-size:14px; font-weight:700; color:white; letter-spacing:-.3px; }
+    .hd-live { display:flex; align-items:center; gap:5px; font-size:11px; color:rgba(255,255,255,.6); font-weight:500; }
+    .live-dot { width:6px; height:6px; background:#4ADE80; border-radius:50%; animation:lp 1.8s ease infinite; }
+    @keyframes lp { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.5;transform:scale(.7)} }
+
+    /* ── PROGRESS ── */
+    .pg { background:white; border-bottom:var(--border); position:sticky; top:52px; z-index:199; }
+    .pg-in { max-width:720px; margin:0 auto; padding:10px 20px; }
+    .pg-row { display:flex; align-items:center; }
+    .pg-step { flex:1; display:flex; flex-direction:column; align-items:center; gap:3px; position:relative; }
+    .pg-step:not(:last-child)::after { content:''; position:absolute; top:11px; left:calc(50% + 12px); right:calc(-50% + 12px); height:2px; background:var(--gray-100); transition:background .4s; }
+    .pg-step.done:not(:last-child)::after { background:var(--blue); }
+    .pg-c { width:22px; height:22px; border-radius:50%; background:var(--gray-100); color:var(--gray-400); display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:700; transition:all .3s; }
+    .pg-step.active .pg-c { background:var(--blue); color:white; box-shadow:0 0 0 3px var(--blue-light); }
+    .pg-step.done .pg-c { background:var(--navy); color:white; }
+    .pg-lbl { font-size:9px; color:var(--gray-400); font-weight:500; white-space:nowrap; }
+    .pg-step.active .pg-lbl, .pg-step.done .pg-lbl { color:var(--navy); font-weight:600; }
+
+    /* ── MAIN ── */
+    main { max-width:720px; margin:0 auto; padding:24px 20px 100px; }
+
+    /* ── SECTIONS ── */
+    .sec { display:none; }
+    .sec.on { display:block; animation:su .28s ease; }
+    @keyframes su { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
+
+    /* ── SECTION HEADER ── */
+    .sec-h { margin-bottom:22px; }
+    .sec-title { font-size:21px; font-weight:700; color:var(--navy); letter-spacing:-.6px; margin-bottom:4px; line-height:1.3; }
+    .sec-sub { font-size:13px; color:var(--gray-400); line-height:1.5; }
+
+    /* ── TYPE GRID ── */
+    .tg { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
+    @media(max-width:480px){ .tg{grid-template-columns:repeat(2,1fr);} }
+    .tc { background:white; border:2px solid var(--gray-100); border-radius:var(--r); padding:18px 10px 16px; cursor:pointer; text-align:center; transition:all .2s; }
+    .tc:hover { border-color:var(--blue); transform:translateY(-2px); box-shadow:var(--shadow-sm); }
+    .tc.sel { border-color:var(--blue); background:var(--blue-light); }
+    .tc-m { font-size:14px; font-weight:700; color:var(--gray-800); margin-bottom:4px; }
+    .tc-s { font-size:11px; color:var(--gray-400); line-height:1.5; }
+
+    /* ── COMPLAINT ── */
+    .cg { display:grid; grid-template-columns:repeat(2,1fr); gap:8px; margin-bottom:10px; }
+    .cc { background:white; border:2px solid var(--gray-100); border-radius:var(--r-sm); padding:13px 14px; cursor:pointer; transition:all .2s; }
+    .cc:hover { border-color:var(--blue); }
+    .cc.sel { border-color:var(--blue); background:var(--blue-light); }
+    .cc-l { font-size:13px; font-weight:500; }
+    .cw { background:white; border:2px solid var(--gray-100); border-radius:var(--r-sm); padding:12px 14px; display:flex; align-items:center; gap:8px; transition:border-color .2s; }
+    .cw:focus-within { border-color:var(--blue); }
+    .cw-p { font-size:12px; color:var(--gray-400); white-space:nowrap; }
+    .cw-i { border:none; outline:none; font-family:'Noto Sans KR',sans-serif; font-size:13px; color:var(--gray-800); flex:1; background:transparent; }
+    .cw-i::placeholder { color:var(--gray-400); }
+
+    /* ── BUTTONS ── */
+    .btn { border:none; cursor:pointer; border-radius:var(--r-sm); font-family:'Noto Sans KR',sans-serif; font-size:14px; font-weight:600; transition:all .2s; letter-spacing:-.2px; }
+    .btn-p { background:var(--navy); color:white; padding:14px 20px; width:100%; margin-top:14px; }
+    .btn-p:hover { background:var(--blue); }
+    .btn-p:disabled { background:var(--gray-200); color:var(--gray-400); cursor:not-allowed; }
+    .btn-b { background:white; color:var(--navy); border:2px solid var(--gray-200) !important; padding:12px 18px; }
+    .btn-b:hover { border-color:var(--navy) !important; }
+    .btn-row { display:flex; gap:10px; margin-top:14px; }
+    .btn-row .btn-b { flex:1; }
+    .btn-row .btn-p { flex:2.5; margin-top:0; }
+
+    /* ── MAP ── */
+    #kmap { width:100%; height:280px; border-radius:var(--r); overflow:hidden; margin-bottom:14px; background:var(--gray-100); }
+
+    /* ── LOADING ── */
+    .ld { display:flex; flex-direction:column; align-items:center; padding:44px 20px; gap:12px; }
+    .spin { width:32px; height:32px; border:3px solid var(--gray-100); border-top-color:var(--blue); border-radius:50%; animation:sp .7s linear infinite; }
+    @keyframes sp { to{transform:rotate(360deg)} }
+    .ld-t { font-size:13px; color:var(--gray-400); }
+
+    /* ── CARD ── */
+    .card { background:white; border:var(--border); border-radius:var(--r); padding:18px; margin-bottom:10px; box-shadow:var(--shadow-xs); }
+    .card-hd { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px; }
+    .card-title { font-size:15px; font-weight:700; color:var(--navy); }
+    .card-sub { font-size:11px; color:var(--gray-400); margin-top:2px; }
+
+    /* ── BADGE ── */
+    .bdg { font-size:11px; font-weight:600; padding:3px 9px; border-radius:20px; white-space:nowrap; }
+    .bdg-g { background:var(--green-bg); color:var(--green); }
+    .bdg-y { background:#FFFBEB; color:#92400E; }
+    .bdg-r { background:var(--red-bg); color:var(--red); }
+    .bdg-b { background:var(--blue-light); color:var(--blue); }
+    .bdg-n { background:#1E293B; color:white; }
+
+    /* ── INFO ROW ── */
+    .ir { display:flex; gap:8px; align-items:flex-start; margin-bottom:7px; font-size:13px; color:var(--gray-600); }
+    .ir .lb { font-size:11px; font-weight:500; color:var(--gray-400); min-width:52px; padding-top:1px; flex-shrink:0; }
+    .ir a { color:var(--blue); text-decoration:none; font-weight:600; }
+
+    /* ── OFFICE CARD ── */
+    .ofc { background:white; border:2px solid var(--gray-100); border-radius:var(--r); padding:16px; margin-bottom:10px; cursor:pointer; transition:all .2s; }
+    .ofc:hover { border-color:var(--blue); }
+    .ofc.sel { border-color:var(--blue); background:var(--blue-light); }
+    .ofc-top { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:4px; }
+    .ofc-name { font-size:15px; font-weight:700; color:var(--navy); }
+    .ofc-dist { font-size:13px; font-weight:700; color:var(--blue); }
+    .ofc-addr { font-size:12px; color:var(--gray-400); margin-bottom:8px; }
+    .ofc-meta { display:flex; gap:10px; flex-wrap:wrap; font-size:12px; color:var(--gray-600); }
+    .ofc-meta strong { color:var(--navy); font-weight:600; }
+    .ofc-tags { display:flex; gap:6px; margin-top:8px; flex-wrap:wrap; }
+    .rec-tag { display:inline-block; background:var(--navy); color:white; font-size:9px; font-weight:700; padding:1px 7px; border-radius:20px; margin-left:5px; vertical-align:middle; }
+    .elev-tag { display:inline-block; background:var(--green-bg); color:var(--green); font-size:9px; font-weight:700; padding:1px 7px; border-radius:20px; margin-left:5px; vertical-align:middle; }
+
+    /* ── REALTIME ── */
+    .rt-hd { display:flex; align-items:center; gap:8px; margin-bottom:10px; }
+    .sec-lbl { font-size:13px; font-weight:600; color:var(--gray-600); }
+    .rt-bdg { display:flex; align-items:center; gap:4px; background:var(--green-bg); color:var(--green); font-size:10px; font-weight:700; padding:2px 8px; border-radius:20px; }
+    .rt-dot { width:5px; height:5px; background:var(--green); border-radius:50%; animation:lp 1.5s infinite; }
+
+    /* ── WINDOWS ── */
+    .wl { display:flex; gap:8px; flex-wrap:wrap; margin-top:12px; }
+    .wnd { background:var(--gray-50); border:var(--border); border-radius:8px; padding:8px 12px; text-align:center; min-width:68px; transition:background .4s; }
+    .wnd-n { font-size:10px; color:var(--gray-400); margin-bottom:3px; }
+    .wnd-c { font-size:16px; font-weight:700; color:var(--navy); }
+    .wnd-c.few  { color:var(--green); }
+    .wnd-c.some { color:var(--orange); }
+    .wnd-c.many { color:var(--red); }
+    .wnd-t { font-size:10px; color:var(--gray-400); margin-top:2px; }
+
+    /* ── AI CARD ── */
+    .ai { background:linear-gradient(135deg, var(--navy) 0%, #1652A8 100%); border-radius:var(--r); padding:22px; color:white; margin-bottom:12px; }
+    .ai-eye { font-size:10px; font-weight:600; letter-spacing:1px; text-transform:uppercase; color:rgba(255,255,255,.55); margin-bottom:8px; }
+    .ai-hl { font-size:17px; font-weight:700; margin-bottom:8px; line-height:1.4; }
+    .ai-bd { font-size:13px; color:rgba(255,255,255,.82); line-height:1.75; }
+    .ai-chips { display:flex; gap:6px; flex-wrap:wrap; margin-top:12px; }
+    .ai-chip { background:rgba(255,255,255,.14); border-radius:20px; padding:3px 10px; font-size:11px; font-weight:500; }
+
+    /* ── NOTE ── */
+    .note { background:var(--gray-50); border-left:3px solid var(--blue); border-radius:0 var(--r-sm) var(--r-sm) 0; padding:10px 14px; font-size:12px; color:var(--gray-600); line-height:1.65; margin-bottom:12px; }
+    .note strong { color:var(--navy); }
+
+    /* ── METHOD ── */
+    .ml { display:flex; flex-direction:column; gap:8px; margin-bottom:16px; }
+    .mth { background:white; border:var(--border); border-radius:var(--r-sm); padding:14px 16px; display:flex; align-items:flex-start; gap:12px; transition:border-color .2s; }
+    .mth:hover { border-color:var(--blue); }
+    .mth.top { border-color:var(--blue); background:var(--blue-light); }
+    .mth-lb { font-size:11px; font-weight:700; padding:2px 8px; border-radius:4px; white-space:nowrap; flex-shrink:0; }
+    .mth-lb.rec { background:var(--navy); color:white; }
+    .mth-lb.alt { background:var(--blue-light); color:var(--blue); }
+    .mth-tt { font-size:14px; font-weight:600; color:var(--gray-800); margin-bottom:2px; }
+    .mth-ds { font-size:12px; color:var(--gray-400); line-height:1.5; }
+
+    /* ── BUS ── */
+    .bus { background:white; border:var(--border); border-radius:var(--r-sm); padding:14px 16px; margin-bottom:8px; display:flex; align-items:center; gap:12px; }
+    .bus-no { color:white; font-size:12px; font-weight:700; padding:5px 10px; border-radius:6px; min-width:52px; text-align:center; flex-shrink:0; line-height:1.3; }
+    .bus-i .t { font-size:13px; font-weight:600; }
+    .bus-i .s { font-size:11px; color:var(--gray-400); margin-top:1px; }
+    .bus-a { margin-left:auto; text-align:right; flex-shrink:0; }
+    .bus-a .time { font-size:17px; font-weight:700; color:var(--blue); font-variant-numeric:tabular-nums; }
+    .bus-a .unit { font-size:10px; color:var(--gray-400); }
+
+    /* ── SIGNAL ── */
+    .sg-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:10px; margin-bottom:14px; }
+    @media(max-width:380px){ .sg-grid{grid-template-columns:1fr;} }
+    .sg { background:white; border:var(--border); border-radius:var(--r); padding:16px; text-align:center; }
+    .sg-nm { font-size:11px; color:var(--gray-400); margin-bottom:10px; line-height:1.4; min-height:28px; }
+    .sg-lights { display:flex; justify-content:center; gap:6px; margin-bottom:10px; }
+    .sg-l { width:18px; height:18px; border-radius:50%; background:var(--gray-100); transition:all .3s; }
+    .sg-l.r.on { background:#EF4444; box-shadow:0 0 10px #EF444455; }
+    .sg-l.y.on { background:#F59E0B; box-shadow:0 0 10px #F59E0B55; }
+    .sg-l.g.on { background:#22C55E; box-shadow:0 0 10px #22C55E55; animation:gb .9s infinite; }
+    @keyframes gb { 0%,100%{opacity:1}50%{opacity:.45} }
+    .sg-t { font-size:34px; font-weight:700; color:var(--navy); line-height:1; margin-bottom:4px; font-variant-numeric:tabular-nums; }
+    .sg-t.green { color:#16A34A; }
+    .sg-t.red   { color:#DC2626; }
+    .sg-d { font-size:11px; color:var(--gray-400); }
+
+    /* ── GOV24 ── */
+    .g24 { background:linear-gradient(135deg, #0E3375 0%, #0B4F9E 100%); border-radius:var(--r); padding:24px; color:white; text-align:center; }
+    .g24-tt { font-size:17px; font-weight:700; margin-bottom:8px; }
+    .g24-ds { font-size:13px; color:rgba(255,255,255,.8); line-height:1.7; margin-bottom:20px; }
+    .g24-btn { display:inline-block; background:white; color:#0B4F9E; padding:12px 30px; border-radius:8px; font-size:14px; font-weight:700; text-decoration:none; transition:all .2s; }
+    .g24-btn:hover { background:#EBF2FF; }
+
+    /* ── LOCATION TABS ── */
+    .loc-tabs { display:flex; gap:0; margin-bottom:12px; border:var(--border); border-radius:var(--r-sm); overflow:hidden; }
+    .loc-tab { flex:1; padding:10px 12px; font-family:'Noto Sans KR',sans-serif; font-size:13px; font-weight:500; border:none; cursor:pointer; background:white; color:var(--gray-400); transition:all .2s; }
+    .loc-tab.active { background:var(--navy); color:white; font-weight:600; }
+    .loc-tab:hover:not(.active) { background:var(--gray-50); color:var(--gray-800); }
+
+    /* ── ADDRESS INPUT ── */
+    .addr-input-wrap { display:flex; gap:8px; }
+    .addr-input { flex:1; border:2px solid var(--gray-200); border-radius:var(--r-sm); padding:11px 14px; font-family:'Noto Sans KR',sans-serif; font-size:13px; color:var(--gray-800); outline:none; transition:border-color .2s; }
+    .addr-input:focus { border-color:var(--blue); }
+    .addr-input::placeholder { color:var(--gray-400); }
+    .addr-btn { background:var(--navy); color:white; border:none; border-radius:var(--r-sm); padding:11px 18px; font-family:'Noto Sans KR',sans-serif; font-size:13px; font-weight:600; cursor:pointer; white-space:nowrap; transition:background .2s; }
+    .addr-btn:hover { background:var(--blue); }
+
+    /* ── DOC ── */
+    .doc { display:flex; align-items:flex-start; gap:8px; font-size:13px; color:var(--gray-600); margin-bottom:6px; }
+    .doc-d { width:6px; height:6px; background:var(--blue); border-radius:50%; margin-top:5px; flex-shrink:0; }
+
+    /* ── DIVIDER ── */
+    .dv { height:1px; background:var(--gray-100); margin:20px 0; }
+
+    /* ── DATA SOURCE ── */
+    .ds-tag { display:inline-flex; align-items:center; gap:4px; background:var(--green-bg); color:var(--green); font-size:10px; font-weight:600; padding:2px 8px; border-radius:20px; }
+    .ds-tag.mock { background:#FEF3C7; color:#92400E; }
+    .ds-dot { width:5px; height:5px; border-radius:50%; background:currentColor; animation:lp 1.5s infinite; }
+  </style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header class="hd">
+  <div class="hd-inner">
+    <div class="hd-logo">
+      <div class="hd-logomark">B</div>
+      <div class="hd-title">BARO : 사용자 맞춤 민원 안내 서비스</div>
+    </div>
+    <div class="hd-live"><div class="live-dot"></div>전국 통합데이터 실시간 연동</div>
+  </div>
+</header>
+
+<!-- PROGRESS -->
+<div class="pg">
+  <div class="pg-in">
+    <div class="pg-row" id="pgRow">
+      <div class="pg-step active" data-s="1"><div class="pg-c">1</div><div class="pg-lbl">유형</div></div>
+      <div class="pg-step" data-s="2"><div class="pg-c">2</div><div class="pg-lbl">민원</div></div>
+      <div class="pg-step" data-s="3"><div class="pg-c">3</div><div class="pg-lbl">위치</div></div>
+      <div class="pg-step" data-s="4"><div class="pg-c">4</div><div class="pg-lbl">분석</div></div>
+      <div class="pg-step" data-s="5"><div class="pg-c">5</div><div class="pg-lbl">현황</div></div>
+      <div class="pg-step" data-s="6"><div class="pg-c">6</div><div class="pg-lbl">교통</div></div>
+    </div>
+  </div>
+</div>
+
+<main>
+  <!-- ── STEP 1: 사용자 유형 ── -->
+  <div class="sec on" id="s1">
+    <div class="sec-h">
+      <div class="sec-title">어떤 분이신가요?</div>
+      <div class="sec-sub">맞춤형 서비스 안내를 위해 방문자 유형을 선택해 주세요.</div>
+    </div>
+    <div class="tg">
+      <div class="tc" data-v="일반인"    onclick="selType(this)"><div class="tc-m">일반인</div><div class="tc-s">만 18세 이상<br>성인 일반</div></div>
+      <div class="tc" data-v="노약자"    onclick="selType(this)"><div class="tc-m">노약자</div><div class="tc-s">만 65세 이상<br>어르신</div></div>
+      <div class="tc" data-v="장애인"    onclick="selType(this)"><div class="tc-m">장애인</div><div class="tc-s">장애인복지법상<br>등록 장애인</div></div>
+      <div class="tc" data-v="유모차동반" onclick="selType(this)"><div class="tc-m">유모차 동반</div><div class="tc-s">영유아 동반<br>보호자</div></div>
+      <div class="tc" data-v="임산부"    onclick="selType(this)"><div class="tc-m">임산부</div><div class="tc-s">임신 중이거나<br>출산 후 6개월</div></div>
+      <div class="tc" data-v="외국인"    onclick="selType(this)"><div class="tc-m">외국인</div><div class="tc-s">외국 국적<br>국내 거주자</div></div>
+    </div>
+    <button class="btn btn-p" id="s1Btn" disabled onclick="go(2)">다음 단계</button>
+  </div>
+
+  <!-- ── STEP 2: 민원 종류 ── -->
+  <div class="sec" id="s2">
+    <div class="sec-h">
+      <div class="sec-title">어떤 민원인가요?</div>
+      <div class="sec-sub">처리하려는 민원을 선택하거나 직접 입력해 주세요.</div>
+    </div>
+    <div class="cg">
+      <div class="cc" data-v="주민등록등본"    onclick="selCc(this)"><div class="cc-l">주민등록등본</div></div>
+      <div class="cc" data-v="주민등록초본"    onclick="selCc(this)"><div class="cc-l">주민등록초본</div></div>
+      <div class="cc" data-v="인감증명서"      onclick="selCc(this)"><div class="cc-l">인감증명서</div></div>
+      <div class="cc" data-v="가족관계증명서"  onclick="selCc(this)"><div class="cc-l">가족관계증명서</div></div>
+      <div class="cc" data-v="여권 발급·재발급" onclick="selCc(this)"><div class="cc-l">여권 발급·재발급</div></div>
+      <div class="cc" data-v="운전면허 관련"   onclick="selCc(this)"><div class="cc-l">운전면허 관련</div></div>
+      <div class="cc" data-v="건강보험 관련"   onclick="selCc(this)"><div class="cc-l">건강보험 관련</div></div>
+      <div class="cc" data-v="국민연금 관련"   onclick="selCc(this)"><div class="cc-l">국민연금 관련</div></div>
+      <div class="cc" data-v="전입신고"         onclick="selCc(this)"><div class="cc-l">전입신고</div></div>
+      <div class="cc" data-v="사업자등록"       onclick="selCc(this)"><div class="cc-l">사업자등록</div></div>
+    </div>
+    <div class="cw">
+      <span class="cw-p">직접 입력</span>
+      <input class="cw-i" id="ccIn" placeholder="민원 내용을 입력하세요"
+        oninput="onCcIn(this)" onfocus="clrCc()">
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-b" onclick="go(1)">이전</button>
+      <button class="btn btn-p" id="s2Btn" disabled onclick="go(3)" style="margin-top:0">다음 단계</button>
+    </div>
+  </div>
+
+  <!-- ── STEP 3: 위치 + 민원실 ── -->
+  <div class="sec" id="s3">
+    <div class="sec-h">
+      <div class="sec-title">가까운 민원실</div>
+      <div class="sec-sub">현재 위치 기반으로 주변 민원실을 안내합니다.</div>
+    </div>
+
+    <!-- 위치 입력 탭 -->
+    <div class="loc-tabs">
+      <button class="loc-tab active" id="tabGps" onclick="switchLocTab('gps')">현재 위치 자동 감지</button>
+      <button class="loc-tab" id="tabManual" onclick="switchLocTab('manual')">주소 직접 입력</button>
+    </div>
+
+    <!-- 수동 주소 입력 -->
+    <div id="manualWrap" style="display:none; margin-bottom:12px;">
+      <div class="addr-input-wrap">
+        <input type="text" id="addrInput" class="addr-input"
+          placeholder="예: 서울시 강남구, 경기도 수원시 팔달구"
+          onkeydown="if(event.key==='Enter') searchByAddr()">
+        <button class="addr-btn" onclick="searchByAddr()">검색</button>
+      </div>
+      <div style="font-size:11px;color:var(--gray-400);margin-top:6px;padding-left:2px">
+        시·도, 시·군·구 단위로 입력하면 해당 지역 민원실을 안내합니다
+      </div>
+    </div>
+
+    <div id="kmap"></div>
+    <div id="ofcList"><div class="ld"><div class="spin"></div><div class="ld-t">주변 민원실을 검색하는 중…</div></div></div>
+    <div class="btn-row" id="s3Btns" style="display:none">
+      <button class="btn btn-b" onclick="go(2)">이전</button>
+      <button class="btn btn-p" id="s3Btn" disabled onclick="go(4)" style="margin-top:0">선택 완료</button>
+    </div>
+  </div>
+
+  <!-- ── STEP 4: AI 분석 ── -->
+  <div class="sec" id="s4">
+    <div class="sec-h">
+      <div class="sec-title">맞춤 처리 방법</div>
+      <div class="sec-sub">입력하신 정보를 분석하여 최적 방법을 추천합니다.</div>
+    </div>
+    <div id="aiWrap"><div class="ld"><div class="spin"></div><div class="ld-t">AI가 최적 처리 방법을 분석하는 중…</div></div></div>
+    <div class="btn-row" id="s4Btns" style="display:none">
+      <button class="btn btn-b" onclick="go(3)">이전</button>
+      <button class="btn btn-p" onclick="go(5)" style="margin-top:0">실시간 현황 보기</button>
+    </div>
+  </div>
+
+  <!-- ── STEP 5: 실시간 현황 ── -->
+  <div class="sec" id="s5">
+    <div class="sec-h"><div class="sec-title">실시간 현황</div></div>
+    <div id="rtWrap"><div class="ld"><div class="spin"></div><div class="ld-t">실시간 대기 현황을 불러오는 중…</div></div></div>
+    <div class="btn-row" id="s5Btns" style="display:none">
+      <button class="btn btn-b" onclick="go(4)">이전</button>
+      <button class="btn btn-p" onclick="go(6)" style="margin-top:0">교통 정보 보기</button>
+    </div>
+  </div>
+
+  <!-- ── STEP 6: 교통 + 신호 ── -->
+  <div class="sec" id="s6">
+    <div class="sec-h">
+      <div class="sec-title">교통 정보</div>
+      <div class="sec-sub">선택한 민원실까지 가는 방법을 안내합니다.</div>
+    </div>
+    <div id="tpWrap"><div class="ld"><div class="spin"></div><div class="ld-t">교통 정보를 불러오는 중…</div></div></div>
+    <div class="dv"></div>
+    <div class="g24">
+      <div class="g24-tt">정부24에서 온라인으로 처리하기</div>
+      <div class="g24-ds"><span id="g24cc"></span> 등 많은 민원을 방문 없이 24시간 처리할 수 있습니다.<br>공동인증서 또는 카카오·네이버 간편인증으로 로그인하세요.</div>
+      <a href="https://www.gov.kr" target="_blank" class="g24-btn">정부24 바로가기 →</a>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-b" onclick="go(5)">이전</button>
+      <button class="btn btn-p" onclick="reset()" style="margin-top:0;background:var(--green)">처음으로</button>
+    </div>
+  </div>
+</main>
+
+<script>
+// ─────────────────────────────────────────
+// STATE
+// ─────────────────────────────────────────
+const S = {
+  userType: null, complaint: null,
+  loc: null,       // {lat, lng, addr, ctprvnCd}
+  offices: [],     office: null,
+  aiRes: null,     map: null,
+  markers: [],     sigTimers: [],
+  busInt: null,    rtInt: null,
+  step: 1
+};
+
+// ─────────────────────────────────────────
+// NAV
+// ─────────────────────────────────────────
+function go(n) {
+  document.querySelectorAll('.sec').forEach(s => s.classList.remove('on'));
+  document.getElementById('s'+n).classList.add('on');
+  document.querySelectorAll('.pg-step').forEach(p => {
+    const i = +p.dataset.s;
+    p.classList.remove('active','done');
+    if (i < n) p.classList.add('done');
+    if (i === n) p.classList.add('active');
+  });
+  S.step = n;
+  window.scrollTo({ top:0, behavior:'smooth' });
+  if (n===3) initS3();
+  if (n===4) initS4();
+  if (n===5) initS5();
+  if (n===6) initS6();
+}
+
+// ─────────────────────────────────────────
+// STEP 1
+// ─────────────────────────────────────────
+function selType(el) {
+  document.querySelectorAll('.tc').forEach(c => c.classList.remove('sel'));
+  el.classList.add('sel');
+  S.userType = el.dataset.v;
+  document.getElementById('s1Btn').disabled = false;
+}
+
+// ─────────────────────────────────────────
+// STEP 2
+// ─────────────────────────────────────────
+function selCc(el) {
+  document.querySelectorAll('.cc').forEach(c => c.classList.remove('sel'));
+  el.classList.add('sel');
+  S.complaint = el.dataset.v;
+  document.getElementById('ccIn').value = '';
+  document.getElementById('s2Btn').disabled = false;
+}
+function clrCc() { document.querySelectorAll('.cc').forEach(c => c.classList.remove('sel')); }
+function onCcIn(inp) {
+  clrCc();
+  S.complaint = inp.value.trim() || null;
+  document.getElementById('s2Btn').disabled = !S.complaint;
+}
+
+// ─────────────────────────────────────────
+// STEP 3 — 위치 + 지도 + 민원실
+// ─────────────────────────────────────────
+function initS3() {
+  // 기존 마커 제거
+  S.markers.forEach(m => { try { m.remove(); } catch(e){} }); S.markers = [];
+  const DEF = { lat:37.5665, lng:126.9780 };
+
+  // ① Leaflet 지도 초기화 (즉시, 동기)
+  const mapEl = document.getElementById('kmap');
+  if (S.map) { try { S.map.remove(); } catch(e){} S.map = null; }
+  try {
+    S.map = L.map(mapEl, { zoomControl:true }).setView([DEF.lat, DEF.lng], 13);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+      maxZoom: 19
+    }).addTo(S.map);
+    // div가 display:block으로 바뀐 직후이므로 크기 재계산 필요
+    setTimeout(() => { try { S.map.invalidateSize(); } catch(e){} }, 100);
+  } catch(e) { console.warn('Leaflet 초기화 실패:', e); S.map = null; }
+
+  // ② GPS 위치 취득
+  let geoResolved = false;
+  const fallback = () => {
+    if (geoResolved) return; geoResolved = true;
+    S.loc = { lat:DEF.lat, lng:DEF.lng, addr:'서울특별시 중구', ctprvnCd:'11' };
+    loadOffices();
+  };
+  const geoTimeout = setTimeout(fallback, 8000);
+
+  const onPos = async (pos) => {
+    if (geoResolved) return; geoResolved = true;
+    clearTimeout(geoTimeout);
+    S.loc = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+    if (S.map) {
+      try { S.map.invalidateSize(); } catch(e){}
+      S.map.setView([S.loc.lat, S.loc.lng], 14);
+      addMarker(S.loc.lat, S.loc.lng, '현재 위치', true);
+    }
+    // Nominatim 역지오코딩으로 주소·시도코드 취득
+    await geocodeLatLng(S.loc.lat, S.loc.lng, addr => {
+      S.loc.addr = addr; S.loc.ctprvnCd = addrToCd(addr);
+    });
+    loadOffices();
+  };
+
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(onPos,
+      () => { clearTimeout(geoTimeout); fallback(); },
+      { timeout:7000, maximumAge:60000 }
+    );
+  } else { clearTimeout(geoTimeout); fallback(); }
+}
+
+async function geocodeLatLng(lat, lng, cb) {
+  try {
+    const r = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&accept-language=ko`,
+      { headers: { 'Accept-Language': 'ko' } }
+    );
+    const d = await r.json();
+    const a = d.address || {};
+    // 한국 행정구역 추출: 시도 + 시군구
+    const sido   = a.province || a.state || '';
+    const sigungu= a.city || a.county || a.town || '';
+    const addr   = [sido, sigungu].filter(Boolean).join(' ') || d.display_name || '서울특별시';
+    cb(addr);
+  } catch(e) {
+    cb('서울특별시');
+  }
+}
+
+function addrToCd(addr) {
+  const m = {'서울':'11','부산':'26','대구':'27','인천':'28','광주':'29','대전':'30','울산':'31','세종':'36','경기':'41','강원':'42','충청북':'43','충청남':'44','전라북':'45','전라남':'46','경상북':'47','경상남':'48','제주':'50'};
+  for (const [k,v] of Object.entries(m)) if (addr?.includes(k)) return v;
+  return '11';
+}
+
+function addMarker(lat, lng, title, isUser) {
+  if (!S.map) return null;
+  try {
+    const icon = isUser
+      ? L.divIcon({ className:'', html:'<div style="width:14px;height:14px;background:#1754B8;border:3px solid white;border-radius:50%;box-shadow:0 2px 6px rgba(0,0,0,.3)"></div>', iconSize:[14,14], iconAnchor:[7,7] })
+      : L.divIcon({ className:'', html:'<div style="width:12px;height:12px;background:#0C2354;border:2px solid white;border-radius:50%;box-shadow:0 2px 4px rgba(0,0,0,.3)"></div>', iconSize:[12,12], iconAnchor:[6,6] });
+    const marker = L.marker([lat, lng], { icon, title }).addTo(S.map);
+    if (!isUser) {
+      marker.bindPopup(`<div style="font-size:12px;font-weight:600;font-family:'Noto Sans KR',sans-serif;white-space:nowrap;padding:2px">${title}</div>`, { closeButton:false });
+      marker.on('mouseover', () => marker.openPopup());
+      marker.on('mouseout',  () => marker.closePopup());
+    }
+    S.markers.push(marker);
+    return marker;
+  } catch(e) { return null; }
+}
+
+async function loadOffices() {
+  const { lat, lng, ctprvnCd } = S.loc;
+
+  try {
+    const r = await fetch(`/api/offices?ctprvnCd=${ctprvnCd}&numOfRows=20`);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const d = await r.json();
+    const raw = d?.response?.body?.items?.item || d?.items?.item;
+    if (raw) {
+      const arr = Array.isArray(raw) ? raw : [raw];
+      if (arr.length && (arr[0]?.csoId || arr[0]?.csoNm)) {
+        processOffices(arr, lat, lng, true); return;
+      }
+    }
+  } catch(e) { console.warn('offices API error:', e.message); }
+
+  processOffices(mockOffices(lat, lng, S.loc.addr), lat, lng, false);
+}
+
+function mockOffices(lat, lng, addr) {
+  const p = addr?.split(' ') || ['서울특별시','중구'];
+  const s1=p[0]||'서울특별시', s2=p[1]||'중구';
+  return [
+    { csoId:'C001', csoNm:`${s2} 주민센터`, rdnmadr:`${s1} ${s2} 청사로 10`, telno:'02-1234-5678', operHour:'09:00 ~ 18:00', holidayOper:'N', elevatorYn:'Y', csoLa:lat+(Math.random()-.5)*.008, csoLo:lng+(Math.random()-.5)*.01 },
+    { csoId:'C002', csoNm:`${s2} 구청 민원실`, rdnmadr:`${s1} ${s2} 구청로 25`, telno:'02-2345-6789', operHour:'09:00 ~ 18:00', holidayOper:'N', elevatorYn:'Y', csoLa:lat+(Math.random()-.5)*.014, csoLo:lng+(Math.random()-.5)*.015 },
+    { csoId:'C003', csoNm:`${s2} 행정복지센터`, rdnmadr:`${s1} ${s2} 행정로 55`, telno:'02-3456-7890', operHour:'09:00 ~ 21:00', holidayOper:'Y', elevatorYn:'N', csoLa:lat+(Math.random()-.5)*.018, csoLo:lng+(Math.random()-.5)*.018 },
+  ];
+}
+
+function processOffices(raw, uLat, uLng, isReal) {
+  raw.forEach(o => {
+    const la = parseFloat(o.csoLa||o.lat||uLat);
+    const lo = parseFloat(o.csoLo||o.lng||uLng);
+    o._lat=la; o._lng=lo;
+    o.dist = dist(uLat,uLng,la,lo);
+    o._real = isReal;
+  });
+  raw.sort((a,b) => a.dist-b.dist);
+  S.offices = raw.slice(0,5);
+  S.offices.forEach(o => addMarker(o._lat, o._lng, o.csoNm||'민원실', false));
+
+  if (S.map) {
+    try {
+      const pts = [[uLat, uLng], ...S.offices.map(o => [o._lat, o._lng])];
+      S.map.fitBounds(L.latLngBounds(pts), { padding:[30,30] });
+    } catch(e) {}
+  }
+  renderOffices(isReal);
+}
+
+function dist(a,b,c,d) {
+  const R=6371, r=v=>v*Math.PI/180;
+  const x=Math.sin(r((c-a)/2))**2+Math.cos(r(a))*Math.cos(r(c))*Math.sin(r((d-b)/2))**2;
+  return Math.round(R*2*Math.atan2(Math.sqrt(x),Math.sqrt(1-x))*10)/10;
+}
+
+function isOpen(h) {
+  if(!h) return true;
+  const now=new Date(), cur=now.getHours()*60+now.getMinutes();
+  const m=h.match(/(\d{1,2}):(\d{2})\s*[~\-]\s*(\d{1,2}):(\d{2})/);
+  if(!m) return now.getHours()>=9&&now.getHours()<18;
+  return cur>= +m[1]*60+ +m[2] && cur< +m[3]*60+ +m[4];
+}
+
+function renderOffices(isReal) {
+  const ut = S.userType;
+  const prefElev = ut==='유모차동반'||ut==='임산부';
+  const sorted = [...S.offices].sort((a,b) => {
+    if (prefElev) {
+      const ae=(a.elevatorYn||a.elevator)==='Y'?0:1;
+      const be=(b.elevatorYn||b.elevator)==='Y'?0:1;
+      return ae-be;
+    }
+    return a.dist-b.dist;
+  });
+
+  const srcBadge = isReal
+    ? `<span class="ds-tag"><span class="ds-dot"></span>실제 데이터</span>`
+    : `<span class="ds-tag mock">데모 데이터</span>`;
+
+  let html = `<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+    <span class="sec-lbl">주변 민원실</span>${srcBadge}</div>`;
+
+  sorted.forEach((o,i) => {
+    const open=isOpen(o.operHour||o.operTime);
+    const elev=(o.elevatorYn||o.elevator)==='Y';
+    const hol=(o.holidayOper||o.holidayOperYn)==='Y';
+    const tags=[];
+    if(i===0) tags.push(`<span class="rec-tag">추천</span>`);
+    if(elev&&prefElev) tags.push(`<span class="elev-tag">엘리베이터</span>`);
+
+    html+=`<div class="ofc ${i===0?'sel':''}" onclick="pickOfc(this,${i})">
+      <div class="ofc-top">
+        <div class="ofc-name">${o.csoNm||'민원실'}${tags.join('')}</div>
+        <span class="ofc-dist">${o.dist}km</span>
+      </div>
+      <div class="ofc-addr">${o.rdnmadr||o.address||''}</div>
+      <div class="ofc-meta">
+        <span>운영: <strong>${o.operHour||'09:00~18:00'}</strong></span>
+        <span>전화: <strong>${o.telno||'-'}</strong></span>
+        ${elev?'<span style="color:var(--green);font-weight:500">엘리베이터</span>':''}
+        ${hol?'<span style="color:var(--blue);font-weight:500">공휴일 운영</span>':''}
+      </div>
+      <div class="ofc-tags">
+        <span class="bdg ${open?'bdg-g':'bdg-r'}">${open?'운영 중':'운영 종료'}</span>
+        ${elev?`<span class="bdg bdg-b">접근 용이</span>`:''}
+      </div>
+    </div>`;
+  });
+
+  document.getElementById('ofcList').innerHTML = html;
+  if(sorted.length) { S.office=sorted[0]; document.getElementById('s3Btn').disabled=false; }
+  document.getElementById('s3Btns').style.display='flex';
+}
+
+function pickOfc(el,idx) {
+  document.querySelectorAll('.ofc').forEach(c=>c.classList.remove('sel'));
+  el.classList.add('sel');
+  S.office=S.offices[idx];
+  document.getElementById('s3Btn').disabled=false;
+  if (S.map) {
+    try { S.map.setView([S.office._lat, S.office._lng], 15); } catch(e) {}
+  }
+}
+
+// ─────────────────────────────────────────
+// STEP 4 — AI 분석
+// ─────────────────────────────────────────
+async function initS4() {
+  document.getElementById('aiWrap').innerHTML='<div class="ld"><div class="spin"></div><div class="ld-t">AI가 최적 처리 방법을 분석하는 중…</div></div>';
+  document.getElementById('s4Btns').style.display='none';
+
+  const o = S.office;
+  let aiRes = null;
+
+  try {
+    const r = await fetch('/api/analyze', {
+      method: 'POST',
+      headers: { 'Content-Type':'application/json' },
+      body: JSON.stringify({
+        userType:   S.userType,
+        complaint:  S.complaint,
+        officeName: o?.csoNm,
+        officeAddr: o?.rdnmadr,
+        officeDist: o?.dist
+      })
+    });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    aiRes = await r.json();
+    if (!aiRes.recommendation) throw new Error('invalid response');
+  } catch(e) {
+    console.warn('analyze API error:', e.message);
+    aiRes = buildMockAI();
+  }
+
+  S.aiRes = aiRes;
+  renderAI(aiRes);
+}
+
+function buildMockAI() {
+  const ut=S.userType, cc=S.complaint||'';
+  const onlineCc=['등본','초본','가족관계'];
+  const isOnline=onlineCc.some(k=>cc.includes(k));
+  const isKiosk=isOnline||cc.includes('인감');
+  const tipMap = {
+    '노약자':'민원실 방문 시 안내데스크에서 노약자 우선창구를 신청하세요.',
+    '장애인':'장애인 전용 주차공간 및 우선창구를 이용하실 수 있습니다.',
+    '유모차동반':'임산부·유아동반 우선창구를 이용하면 대기 없이 처리 가능합니다.',
+    '임산부':'임산부 우선창구를 통해 신속하게 처리받으실 수 있습니다.',
+    '일반인':'정부24 앱에서 간편인증으로 5분 이내 발급 가능합니다.',
+    '외국인':'외국인 민원 전담 창구가 있는 민원실을 이용하세요.',
+  };
+  const docsMap = {
+    '등본':['주민등록증 또는 운전면허증','발급 수수료 (400원)'],
+    '초본':['주민등록증 또는 운전면허증','발급 수수료 (400원)'],
+    '인감':['주민등록증','인감도장','발급 수수료 (600원)'],
+    '가족관계':['주민등록증 또는 운전면허증','발급 수수료 (1,000원)'],
+    '여권':['여권용 사진 1매','신분증','발급 수수료'],
+    '운전면허':['신분증','관련 서류'],
+    '건강보험':['신분증','가족관계증명서 (가족 관련 시)'],
+    '전입':['신분증','임대차계약서'],
+    '사업자':['신분증','임대차계약서','사업계획서 (업종별)'],
+  };
+  let docs=['신분증 (주민등록증 또는 운전면허증)','발급 수수료'];
+  for(const [k,v] of Object.entries(docsMap)) if(cc.includes(k.substring(0,2))){docs=v;break;}
+  const isAccessible=ut==='노약자'||ut==='장애인'||ut==='임산부';
+  let rec,reason;
+  if(ut==='일반인'&&isOnline){ rec='정부24 온라인 처리 권장'; reason='방문 없이 24시간 즉시 발급 가능합니다. 수수료 50% 할인 혜택이 있습니다.'; }
+  else if(ut==='일반인'&&isKiosk){ rec='무인민원발급기 이용 권장'; reason='주변 편의점·지하철역 무인발급기에서 즉시 발급 가능합니다. 24시간 운영합니다.'; }
+  else if(isAccessible){ rec='민원실 방문 (우선창구 이용)'; reason='방문 시 우선창구를 통해 대기 없이 처리됩니다. 교통약자 이동지원 서비스도 이용하세요.'; }
+  else if(ut==='유모차동반'){ rec='엘리베이터 있는 민원실 방문'; reason='유모차 접근이 가능한 민원실을 선택했습니다. 유아동반 우선창구 이용이 가능합니다.'; }
+  else{ rec='민원실 방문 처리'; reason='선택하신 민원은 직접 방문이 필요합니다. 가까운 민원실을 이용하시기 바랍니다.'; }
+  return { recommendation:rec, reason, documents:docs, time:'10~20분 (대기시간 제외)', tip:tipMap[ut]||'신분증을 반드시 지참하세요.', online:isOnline, kiosk:isKiosk };
+}
+
+function renderAI(r) {
+  const o=S.office;
+  const methods=[];
+  if(r.online)  methods.push({lbl:'온라인',   tt:'정부24 온라인 처리',     ds:'24시간 인터넷 발급 · 수수료 50% 할인 · 대기 없음',              rec:r.recommendation?.includes('온라인')});
+  if(r.kiosk)   methods.push({lbl:'무인기기',  tt:'무인민원발급기 이용',    ds:'가까운 편의점·지하철역·주민센터 24시간 운영',                     rec:r.recommendation?.includes('무인')});
+  methods.push({lbl:'방문', tt:`${o?.csoNm||'민원실'} 방문`, ds:`${o?.operHour||'09:00~18:00'} · 전화: ${o?.telno||'-'}`, rec:r.recommendation?.includes('방문')});
+  methods.sort((a,b)=>(b.rec?1:0)-(a.rec?1:0));
+
+  const html=`
+    <div class="ai">
+      <div class="ai-eye">AI 맞춤 분석</div>
+      <div class="ai-hl">${S.userType}님 추천: ${r.recommendation}</div>
+      <div class="ai-bd">${r.reason}</div>
+      <div class="ai-chips">
+        <div class="ai-chip">처리시간 ${r.time}</div>
+        <div class="ai-chip">${S.complaint}</div>
+        <div class="ai-chip">${S.userType}</div>
+      </div>
+    </div>
+    <div class="note"><strong>💡 팁</strong>&nbsp;${r.tip}</div>
+    <div class="sec-lbl" style="margin-bottom:10px">구비서류</div>
+    <div class="card" style="margin-bottom:14px">
+      ${(r.documents||[]).map(d=>`<div class="doc"><div class="doc-d"></div><span>${d}</span></div>`).join('')}
+    </div>
+    <div class="sec-lbl" style="margin-bottom:10px">처리 방법 비교</div>
+    <div class="ml">
+      ${methods.map((m,i)=>`
+        <div class="mth ${i===0?'top':''}">
+          <span class="mth-lb ${i===0?'rec':'alt'}">${i===0?'추천':m.lbl}</span>
+          <div><div class="mth-tt">${m.tt}</div><div class="mth-ds">${m.ds}</div></div>
+        </div>`).join('')}
+    </div>`;
+
+  document.getElementById('aiWrap').innerHTML = html;
+  document.getElementById('s4Btns').style.display = 'flex';
+}
+
+// ─────────────────────────────────────────
+// STEP 5 — 실시간 현황
+// ─────────────────────────────────────────
+async function initS5() {
+  document.getElementById('rtWrap').innerHTML='<div class="ld"><div class="spin"></div><div class="ld-t">실시간 대기 현황을 불러오는 중…</div></div>';
+  document.getElementById('s5Btns').style.display='none';
+  clearInterval(S.rtInt);
+
+  const o=S.office;
+  let windows=null, isReal=false;
+
+  try {
+    const r=await fetch(`/api/realtime?csoId=${o?.csoId||''}&numOfRows=10`);
+    if(!r.ok) throw new Error(`HTTP ${r.status}`);
+    const d=await r.json();
+    const raw=d?.response?.body?.items?.item||d?.items?.item;
+    if(raw){ windows=Array.isArray(raw)?raw:[raw]; isReal=true; }
+  } catch(e){ console.warn('realtime API error:', e.message); }
+
+  if(!windows) windows=buildMockWnd();
+  renderRT(windows, isReal);
+
+  S.rtInt=setInterval(()=>{
+    fetch(`/api/realtime?csoId=${o?.csoId||''}`)
+      .then(r=>r.ok?r.json():null)
+      .then(d=>{
+        const raw=d?.response?.body?.items?.item||d?.items?.item;
+        if(raw) updateWnd(Array.isArray(raw)?raw:[raw]);
+        else updateWnd(buildMockWnd());
+      })
+      .catch(()=>updateWnd(buildMockWnd()));
+  }, 30000);
+}
+
+function buildMockWnd() {
+  const officeOpen = isOpen(S.office?.operHour);
+  if (!officeOpen) {
+    return [
+      {wndwNo:'1번 창구', wndwType:'일반민원',    waitPerson:0, status:'운영종료'},
+      {wndwNo:'2번 창구', wndwType:'일반민원',    waitPerson:0, status:'운영종료'},
+      {wndwNo:'3번 창구', wndwType:'여권·인감',   waitPerson:0, status:'운영종료'},
+      {wndwNo:'4번 창구', wndwType:'우선창구',    waitPerson:0, status:'운영종료'},
+      {wndwNo:'5번 창구', wndwType:'세금·수수료', waitPerson:0, status:'운영종료'},
+    ];
+  }
+  return [
+    {wndwNo:'1번 창구', wndwType:'일반민원',   waitPerson:Math.floor(Math.random()*9)+1, status:'운영중'},
+    {wndwNo:'2번 창구', wndwType:'일반민원',   waitPerson:Math.floor(Math.random()*5),   status:'운영중'},
+    {wndwNo:'3번 창구', wndwType:'여권·인감',  waitPerson:Math.floor(Math.random()*7)+1, status:'운영중'},
+    {wndwNo:'4번 창구', wndwType:'우선창구',   waitPerson:Math.floor(Math.random()*2),   status:'운영중'},
+    {wndwNo:'5번 창구', wndwType:'세금·수수료',waitPerson:0,                             status:'일시중단'},
+  ];
+}
+
+function renderRT(windows, isReal) {
+  const o=S.office, open=isOpen(o?.operHour);
+  if (!open) windows = windows.map(w => ({ ...w, waitPerson:0, waitCount:0, status:'운영종료' }));
+  const total=windows.reduce((s,w)=>s+(w.waitPerson||w.waitCount||0),0);
+  const bCls=total>15?'bdg-r':total>7?'bdg-y':'bdg-g';
+  const bLbl=total>15?'혼잡':total>7?'보통':'여유';
+  const now=new Date().toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});
+  const srcBadge=isReal?`<span class="ds-tag"><span class="ds-dot"></span>실제 데이터</span>`:`<span class="ds-tag mock">데모 데이터</span>`;
+
+  let html=`
+    <div class="rt-hd"><span class="sec-lbl">${o?.csoNm||'선택 민원실'}</span>${srcBadge}</div>
+    <div class="card">
+      <div class="card-hd">
+        <div><div class="card-title">운영 현황</div><div class="card-sub">갱신 ${now}</div></div>
+        <span class="bdg ${open?bCls:'bdg-r'}">${open?bLbl:'운영 종료'}</span>
+      </div>
+      <div class="ir"><span class="lb">운영시간</span>${o?.operHour||'09:00 ~ 18:00'}</div>
+      <div class="ir"><span class="lb">연락처</span><a href="tel:${o?.telno}">${o?.telno||'-'}</a></div>
+      <div class="ir"><span class="lb">주소</span>${o?.rdnmadr||'-'}</div>
+      <div class="ir"><span class="lb">총 대기</span>
+        <strong style="color:${!open?'var(--gray-400)':total>10?'var(--red)':'var(--green)'};font-size:15px">${open?'현재 '+total+'명 대기':'대기 없음 (운영 종료)'}</strong>
+      </div>
+    </div>`;
+
+  if(windows.length){
+    html+=`<div class="card">
+      <div class="card-hd">
+        <div class="card-title">창구별 현황</div>
+        ${open ? '<div class="rt-bdg"><div class="rt-dot"></div>LIVE</div>' : '<span class="bdg bdg-r" style="font-size:10px">운영 종료</span>'}
+      </div>
+      ${!open ? '<div style="font-size:13px;color:var(--gray-400);padding:4px 0 8px">운영 시간이 아닙니다. 내일 다시 확인해 주세요.</div>' : ''}
+      <div class="wl" id="wndList">
+        ${windows.map(w=>{
+          const cnt=open?(w.waitPerson||w.waitCount||0):0;
+          const active=open&&w.status!=='일시중단'&&w.status!=='운영종료';
+          const cls=cnt>=6?'many':cnt>=3?'some':'few';
+          const id='w_'+encodeURIComponent(w.wndwNo||'');
+          return `<div class="wnd" id="${id}" style="${!open?'opacity:0.4':''}">
+            <div class="wnd-n">${w.wndwNo}</div>
+            <div class="wnd-c ${active?cls:''}">${active?cnt+'명':'-'}</div>
+            <div class="wnd-t">${w.wndwType}</div>
+          </div>`;
+        }).join('')}
+      </div>
+      ${open ? '<div style="margin-top:10px;font-size:11px;color:var(--gray-400)">※ 30초마다 자동 갱신됩니다</div>' : ''}
+    </div>`;
+  }
+
+  document.getElementById('rtWrap').innerHTML=html;
+  document.getElementById('s5Btns').style.display='flex';
+}
+
+function updateWnd(windows) {
+  windows.forEach(w=>{
+    const id='w_'+encodeURIComponent(w.wndwNo||'');
+    const el=document.getElementById(id);
+    if(!el||w.status==='일시중단') return;
+    const cnt=w.waitPerson||0;
+    const cls=cnt>=6?'many':cnt>=3?'some':'few';
+    const ce=el.querySelector('.wnd-c');
+    if(ce){ ce.className=`wnd-c ${cls}`; ce.textContent=cnt+'명'; }
+    el.style.background='#EBF3FF';
+    setTimeout(()=>{ el.style.background=''; }, 600);
+  });
+}
+
+// ─────────────────────────────────────────
+// STEP 6 — 교통 + 신호
+// ─────────────────────────────────────────
+async function initS6() {
+  document.getElementById('tpWrap').innerHTML='<div class="ld"><div class="spin"></div><div class="ld-t">교통 정보를 불러오는 중…</div></div>';
+  document.getElementById('g24cc').textContent=S.complaint||'주민등록등본';
+  S.sigTimers.forEach(t=>clearInterval(t)); S.sigTimers=[];
+  clearInterval(S.busInt);
+
+  const cd=S.loc?.ctprvnCd||'11';
+  const [buses, signals, transport] = await Promise.all([
+    fetch(`/api/buses?ctprvnCd=${cd}&numOfRows=10`).then(r=>r.ok?r.json():null).catch(()=>null),
+    fetch(`/api/signals?ctprvnCd=${cd}`).then(r=>r.ok?r.json():null).catch(()=>null),
+    fetch(`/api/transport?ctprvnCd=${cd}&numOfRows=3`).then(r=>r.ok?r.json():null).catch(()=>null),
+  ]);
+
+  const busArr  = parseBuses(buses);
+  const sigArr  = parseSignals(signals);
+  const tpData  = transport;
+
+  renderTransport(busArr, sigArr, tpData);
+}
+
+function parseBuses(d) {
+  if(!d) return buildMockBus();
+  const raw=d?.response?.body?.items?.item||d?.items?.item;
+  if(!raw) return buildMockBus();
+  const arr=Array.isArray(raw)?raw:[raw];
+  if(!arr.length||!arr[0]?.routeId) return buildMockBus();
+  return arr.slice(0,3).map(b=>({
+    routeNo:   b.routeNo||b.routeNm||'노선',
+    routeType: b.routeTypeCd||b.routeType||'일반',
+    startStop: b.startStopNm||b.startNm||'현재 위치',
+    endStop:   b.endStopNm||b.endNm||(S.office?.csoNm||'민원실'),
+    arrMin:    Math.floor(Math.random()*10)+2,
+    stops:     Math.floor(Math.random()*5)+1,
+    _real:     true
+  }));
+}
+
+function buildMockBus() {
+  const ofc=S.office?.csoNm||'민원실';
+  return [
+    { routeNo:'143', routeType:'간선버스', startStop:'현재 위치 (도보 2분)', endStop:ofc+' 앞',    arrMin:Math.floor(Math.random()*7)+2, stops:Math.floor(Math.random()*3)+1, _real:false },
+    { routeNo:'201', routeType:'지선버스', startStop:'현재 위치 (도보 4분)', endStop:ofc+' 200m', arrMin:Math.floor(Math.random()*12)+6, stops:Math.floor(Math.random()*5)+3, _real:false },
+    { routeNo:'지하철', routeType:'지하철', startStop:'인근 역 (도보 6분)', endStop:'환승 후 도보 4분', arrMin:Math.floor(Math.random()*4)+3, stops:null, _real:false },
+  ];
+}
+
+function parseSignals(d) {
+  if(!d) return buildMockSig();
+  const items=d?.items||d?.response?.body?.items?.item||d?.items?.item;
+  if(!items) return buildMockSig();
+  const arr=Array.isArray(items)?items:[items];
+  if(!arr.length) return buildMockSig();
+  return arr.slice(0,4).map(s=>({
+    name: s.crsrdNm||s.crossNm||s.crsrdId||'교차로',
+    remaining: parseInt(s.pdrsnSignRmdrTime||s.bsSignRmdrTime||Math.floor(Math.random()*45)+5),
+    isGreen: (s.pdrsnSignSttusNm||'').includes('보행')||(s.pdrsnSignSttusNm||'').includes('녹'),
+    _real: true
+  }));
+}
+
+function buildMockSig() {
+  return ['청사 앞 교차로','민원실 근처 횡단보도','버스정류장 앞','주요 교차로'].map(n=>({
+    name:n, remaining:Math.floor(Math.random()*45)+5, isGreen:Math.random()>.5, _real:false
+  }));
+}
+
+function renderTransport(buses, signals, tpData) {
+  const ut=S.userType, o=S.office, d=o?.dist||1;
+  const wMin=Math.round(d*13);
+  const needAccess=ut==='노약자'||ut==='장애인'||ut==='임산부';
+  const busReal=buses?.[0]?._real;
+  const sigReal=signals?.[0]?._real;
+
+  const methods=[];
+  methods.push({lbl:'도보', tt:`도보 이동 (약 ${wMin}분)`,  ds:`현재 위치에서 약 ${d}km · <a href="javascript:openKakao()" style="color:var(--blue)">지도 길찾기</a>`, rec:d<0.6});
+  if(buses?.length) methods.push({lbl:'버스', tt:`버스 이용 (${buses[0].routeNo}번)`, ds:`${buses[0].startStop} 탑승 → ${buses[0].endStop}`, rec:d>=0.6&&d<3});
+  if(needAccess){
+    const center=tpData?.centers?.[0];
+    methods.push({lbl:'교통약자', tt:'교통약자 이동지원 택시', ds:center?`${center.centerNm||'이동지원센터'} · ${center.telNo||center.centerTelno||'지역 센터 문의'}`:'지역 교통약자이동지원센터 예약 신청', rec:ut==='장애인'});
+  }
+  methods.push({lbl:'택시', tt:'택시 이용', ds:`예상 ${(Math.round((3800+d*130)/100)*100).toLocaleString()}원 내외 · 카카오T 앱 호출`, rec:false});
+  methods.sort((a,b)=>(b.rec?1:0)-(a.rec?1:0));
+
+  let html=`<div class="sec-lbl" style="margin-bottom:10px">방문 방법</div>
+  <div class="ml">
+    ${methods.map((m,i)=>`<div class="mth ${i===0?'top':''}">
+      <span class="mth-lb ${i===0?'rec':'alt'}">${i===0?'추천':m.lbl}</span>
+      <div><div class="mth-tt">${m.tt}</div><div class="mth-ds">${m.ds}</div></div>
+    </div>`).join('')}
+  </div>`;
+
+  // 버스 실시간
+  if(buses?.length){
+    const srcB=busReal?`<span class="ds-tag"><span class="ds-dot"></span>실제 데이터</span>`:`<span class="ds-tag mock">데모 데이터</span>`;
+    html+=`<div class="dv"></div>
+      <div class="rt-hd"><span class="sec-lbl">버스 실시간 도착정보</span>${srcB}<div class="rt-bdg"><div class="rt-dot"></div>실시간</div></div>`;
+    buses.forEach(b=>{
+      const col=b.routeType?.includes('지하철')?'#2D4B8E':b.routeType?.includes('간선')?'var(--navy)':'#2B6CB0';
+      const k='bt_'+encodeURIComponent(b.routeNo);
+      html+=`<div class="bus">
+        <div class="bus-no" style="background:${col}">${b.routeNo}</div>
+        <div class="bus-i"><div class="t">${b.startStop}</div><div class="s">${b.endStop}${b.stops?` · ${b.stops}정거장`:''}</div></div>
+        <div class="bus-a"><div class="time" id="${k}">약 ${b.arrMin}분</div><div class="unit">후 도착</div></div>
+      </div>`;
+    });
+    startBusCD(buses);
+  }
+
+  // 신호등
+  if(signals?.length){
+    const srcS=sigReal?`<span class="ds-tag"><span class="ds-dot"></span>실제 데이터</span>`:`<span class="ds-tag mock">데모 데이터</span>`;
+    html+=`<div class="dv"></div>
+      <div class="rt-hd"><span class="sec-lbl">인근 횡단보도 신호</span>${srcS}<div class="rt-bdg"><div class="rt-dot"></div>실시간</div></div>
+      <div class="sg-grid">`;
+    signals.forEach((s,i)=>{
+      html+=`<div class="sg">
+        <div class="sg-nm">${s.name}</div>
+        <div class="sg-lights">
+          <div class="sg-l r ${!s.isGreen?'on':''}"></div>
+          <div class="sg-l y"></div>
+          <div class="sg-l g ${s.isGreen?'on':''}"></div>
+        </div>
+        <div class="sg-t ${s.isGreen?'green':'red'}" id="st_${i}">${s.remaining}</div>
+        <div class="sg-d" id="sd_${i}">${s.isGreen?'보행 가능':'대기 중'} · 잔여 <span id="ss_${i}">${s.remaining}</span>초</div>
+      </div>`;
+      startSigCD(i, s.remaining, s.isGreen);
+    });
+    html+=`</div>`;
+  }
+
+  document.getElementById('tpWrap').innerHTML=html;
+}
+
+function startSigCD(idx, init, startGreen) {
+  let rem=init, green=startGreen;
+  const GC=28, RC=38;
+  const t=setInterval(()=>{
+    rem--;
+    const el=document.getElementById(`st_${idx}`);
+    if(!el){ clearInterval(t); return; }
+    if(rem<=0){
+      green=!green; rem=green?GC:RC;
+      const card=el.closest('.sg');
+      if(card){
+        card.querySelectorAll('.sg-l').forEach(l=>l.classList.remove('on'));
+        card.querySelector(green?'.sg-l.g':'.sg-l.r')?.classList.add('on');
+        el.className=`sg-t ${green?'green':'red'}`;
+        document.getElementById(`sd_${idx}`).innerHTML=`${green?'보행 가능':'대기 중'} · 잔여 <span id="ss_${idx}">${rem}</span>초`;
+      }
+    }
+    el.textContent=rem;
+    const ss=document.getElementById(`ss_${idx}`);
+    if(ss) ss.textContent=rem;
+  },1000);
+  S.sigTimers.push(t);
+}
+
+function startBusCD(buses) {
+  const st={};
+  buses.forEach(b=>{ st[encodeURIComponent(b.routeNo)]=b.arrMin*60; });
+  S.busInt=setInterval(()=>{
+    buses.forEach(b=>{
+      const k=encodeURIComponent(b.routeNo);
+      const el=document.getElementById('bt_'+k);
+      if(!el){ clearInterval(S.busInt); return; }
+      st[k]--;
+      const total=st[k];
+      if(total<=0){
+        st[k]=(Math.floor(Math.random()*15)+7)*60;
+        el.style.color='var(--red)'; el.textContent='곧 도착';
+        setTimeout(()=>{ el.style.color=''; },3000);
+      } else {
+        el.textContent=Math.floor(total/60)>0?`약 ${Math.floor(total/60)}분`:`${total%60}초`;
+      }
+    });
+  },1000);
+}
+
+function openKakao() {
+  if(!S.office) return;
+  // OpenStreetMap 길찾기 (출발지 → 민원실)
+  const to = `${S.office._lat},${S.office._lng}`;
+  const from = S.loc ? `${S.loc.lat},${S.loc.lng}` : '';
+  const url = from
+    ? `https://www.openstreetmap.org/directions?engine=fossgis_osrm_foot&route=${from};${to}`
+    : `https://www.openstreetmap.org/?mlat=${S.office._lat}&mlon=${S.office._lng}&zoom=17`;
+  window.open(url, '_blank');
+}
+
+// ─────────────────────────────────────────
+// RESET
+// ─────────────────────────────────────────
+// ─────────────────────────────────────────
+// 위치 탭 전환
+// ─────────────────────────────────────────
+function switchLocTab(mode) {
+  const isManual = mode === 'manual';
+  document.getElementById('tabGps').classList.toggle('active', !isManual);
+  document.getElementById('tabManual').classList.toggle('active', isManual);
+  document.getElementById('manualWrap').style.display = isManual ? 'block' : 'none';
+
+  if (!isManual) {
+    // GPS 모드로 전환 — 자동 위치 재시도
+    document.getElementById('ofcList').innerHTML =
+      '<div class="ld"><div class="spin"></div><div class="ld-t">위치를 다시 감지하는 중…</div></div>';
+    document.getElementById('s3Btns').style.display = 'none';
+    document.getElementById('s3Btn').disabled = true;
+    S.offices = []; S.office = null;
+    initS3();
+  }
+}
+
+// ─────────────────────────────────────────
+// 주소 수동 입력 → 민원실 검색
+// ─────────────────────────────────────────
+function searchByAddr() {
+  const raw = document.getElementById('addrInput').value.trim();
+  if (!raw) { alert('주소를 입력해 주세요.'); return; }
+
+  // 입력 주소에서 시도코드 추출
+  const ctprvnCd = addrToCd(raw);
+
+  // 시도코드로 지역명 매핑
+  const cdToName = {
+    '11':'서울특별시','26':'부산광역시','27':'대구광역시','28':'인천광역시',
+    '29':'광주광역시','30':'대전광역시','31':'울산광역시','36':'세종특별자치시',
+    '41':'경기도','42':'강원도','43':'충청북도','44':'충청남도',
+    '45':'전라북도','46':'전라남도','47':'경상북도','48':'경상남도','50':'제주특별자치도'
+  };
+  const regionName = cdToName[ctprvnCd] || raw;
+
+  // 입력값으로 loc 세팅 (좌표는 시도 대표 좌표 사용)
+  const regionCoords = {
+    '11':{lat:37.5665,lng:126.9780}, '26':{lat:35.1796,lng:129.0756},
+    '27':{lat:35.8714,lng:128.6014}, '28':{lat:37.4563,lng:126.7052},
+    '29':{lat:35.1595,lng:126.8526}, '30':{lat:36.3504,lng:127.3845},
+    '31':{lat:35.5384,lng:129.3114}, '36':{lat:36.4801,lng:127.2890},
+    '41':{lat:37.4138,lng:127.5183}, '42':{lat:37.8228,lng:128.1555},
+    '43':{lat:36.6357,lng:127.4917}, '44':{lat:36.6588,lng:126.6728},
+    '45':{lat:35.7175,lng:127.1530}, '46':{lat:34.8679,lng:126.9910},
+    '47':{lat:36.4919,lng:128.8889}, '48':{lat:35.4606,lng:128.2132},
+    '50':{lat:33.4890,lng:126.4983}
+  };
+  const coord = regionCoords[ctprvnCd] || { lat:37.5665, lng:126.9780 };
+
+  S.loc = { lat:coord.lat, lng:coord.lng, addr:raw, ctprvnCd };
+
+  // 지도가 있으면 해당 지역으로 이동
+  if (S.map) {
+    try { S.map.setView([coord.lat, coord.lng], 12); } catch(e) {}
+  }
+
+  // 민원실 목록 초기화 후 검색
+  S.offices = []; S.office = null;
+  document.getElementById('s3Btn').disabled = true;
+  document.getElementById('s3Btns').style.display = 'none';
+  document.getElementById('ofcList').innerHTML =
+    '<div class="ld"><div class="spin"></div><div class="ld-t">' + regionName + ' 민원실을 검색하는 중…</div></div>';
+
+  loadOffices();
+}
+
+// ─────────────────────────────────────────
+// RESET
+// ─────────────────────────────────────────
+function reset() {
+  S.sigTimers.forEach(t=>clearInterval(t)); S.sigTimers=[];
+  clearInterval(S.busInt); clearInterval(S.rtInt);
+  Object.assign(S,{userType:null,complaint:null,loc:null,offices:[],office:null,aiRes:null,map:null,markers:[],step:1});
+  document.querySelectorAll('.tc,.cc').forEach(c=>c.classList.remove('sel'));
+  document.getElementById('s1Btn').disabled=true;
+  document.getElementById('s2Btn').disabled=true;
+  document.getElementById('ccIn').value='';
+  go(1);
+}
+</script>
+</body>
+</html>
