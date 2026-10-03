@@ -132,11 +132,12 @@ API 승인 후에도 실제 응답을 안정적으로 받지 못했습니다(원
 
 ## 🖥️ 화면
 
-<!-- TODO: 캡처 추가 -->
-| 유형 선택 | AI 추천 | 실시간 현황 | 교통 안내 |
-|---|---|---|---|
-| <img width="1123" height="1678" alt="image" src="https://github.com/user-attachments/assets/f91df10a-ddaa-49e9-bb6f-ecfe29c65e5d" />
- | <img width="1103" height="1252" alt="image" src="https://github.com/user-attachments/assets/d87ecf61-f367-4bac-b87b-fef61ae0547b" />
- | <img width="1139" height="1134" alt="image" src="https://github.com/user-attachments/assets/e380f978-b5c2-47ab-8c95-d866467a337a" />
- | <img width="1178" height="1897" alt="image" src="https://github.com/user-attachments/assets/e17990ad-4d3c-4119-afbb-ddbbf1a10fa6" />
- |
+[유형 선택]
+<img width="1123" height="1678" alt="image" src="https://github.com/user-attachments/assets/f91df10a-ddaa-49e9-bb6f-ecfe29c65e5d" />
+[AI 추천]
+<img width="1103" height="1252" alt="image" src="https://github.com/user-attachments/assets/d87ecf61-f367-4bac-b87b-fef61ae0547b" />
+[실시간 현황]
+<img width="1139" height="1134" alt="image" src="https://github.com/user-attachments/assets/e380f978-b5c2-47ab-8c95-d866467a337a" />
+[교통 안내]
+<img width="1178" height="1897" alt="image" src="https://github.com/user-attachments/assets/e17990ad-4d3c-4119-afbb-ddbbf1a10fa6" />
+
