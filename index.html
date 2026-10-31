@@ -815,6 +815,7 @@ async function initS5() {
   } catch(e){ console.warn('realtime API error:', e.message); }
 
   if(!windows) windows=buildMockWnd();
+  let shownWnd=windows.length>0;
   renderRT(windows, isReal);
 
   S.rtInt=setInterval(()=>{
@@ -824,8 +825,9 @@ async function initS5() {
       .then(d=>{
         if(!(d?.ok && d.items?.length)) return;
         const w=toWindows(d.items);
-        if(isReal) updateWnd(w);
-        else { isReal=true; renderRT(w, true); }  // 처음엔 실패했지만 재시도에서 받아 오면 실제 데이터로 전환
+        // 창구 카드가 이미 있으면 숫자만 갱신, 없었으면(처음 실패했거나 빈 목록) 다시 그린다
+        if(isReal && shownWnd) updateWnd(w);
+        else { isReal=true; shownWnd=true; renderRT(w, true); }
       })
       .catch(()=>{});
   }, 30000);
