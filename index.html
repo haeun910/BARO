@@ -949,8 +949,8 @@ async function initS6() {
 }
 
 function parseBuses(d) {
-  if(!d) return buildMockBus();
-  if(!d.ok||!d.items?.length) return buildMockBus();
+  // 데이터가 없으면 데모 대신 빈 목록 → 화면에 '정보 없음' 표시
+  if(!d?.ok||!d.items?.length) return [];
   // 노선 기본정보에는 도착 예정 시간이 없으므로 기점·종점과 첫차·막차를 보여 준다
   const t=v=>v?`${String(v).padStart(4,'0').slice(0,2)}:${String(v).padStart(4,'0').slice(2,4)}`:'';
   return d.items.slice(0,3).map(b=>({
@@ -975,12 +975,12 @@ function buildMockBus() {
 }
 
 function parseSignals(d) {
-  if(!d) return buildMockSig();
-  if(!d.ok||!d.items?.length) return buildMockSig();
-  const arr=d.items;
+  if(!d?.ok||!d.items?.length) return [];
+  // 잔여시간 값이 있는 교차로만 표시 (임의 숫자로 채우지 않음)
+  const arr=d.items.filter(s=>s.pdrsnSignRmdrTime!=null||s.bsSignRmdrTime!=null);
   return arr.slice(0,4).map(s=>({
     name: s.crsrdNm||s.crossNm||s.crsrdId||'교차로',
-    remaining: parseInt(s.pdrsnSignRmdrTime||s.bsSignRmdrTime||Math.floor(Math.random()*45)+5),
+    remaining: parseInt(s.pdrsnSignRmdrTime??s.bsSignRmdrTime),
     isGreen: (s.pdrsnSignSttusNm||'').includes('보행')||(s.pdrsnSignSttusNm||'').includes('녹'),
     _real: true
   }));
@@ -1001,7 +1001,7 @@ function renderTransport(buses, signals, tpData) {
 
   const methods=[];
   methods.push({lbl:'도보', tt:`도보 이동 (약 ${wMin}분)`,  ds:`현재 위치에서 약 ${d}km · <a href="javascript:openKakao()" style="color:var(--blue)">지도 길찾기</a>`, rec:d<0.6});
-  if(buses?.length) methods.push({lbl:'버스', tt:`버스 이용 (${buses[0].routeNo}번)`, ds:`${buses[0].startStop} 탑승 → ${buses[0].endStop}`, rec:d>=0.6&&d<3});
+  methods.push({lbl:'대중교통', tt:'버스·지하철 이용', ds:`<a href="javascript:openKakao()" style="color:var(--blue)">지도에서 경로 확인</a>`, rec:d>=0.6});
   if(needAccess){
     const center=tpData?.centers?.[0];
     methods.push({lbl:'교통약자', tt:'교통약자 이동지원 택시', ds:center?`${center.centerNm||'이동지원센터'} · ${center.telNo||center.centerTelno||'지역 센터 문의'}`:'지역 교통약자이동지원센터 예약 신청', rec:ut==='장애인'});
@@ -1018,6 +1018,8 @@ function renderTransport(buses, signals, tpData) {
   </div>`;
 
   // 버스 실시간
+  const none=(t)=>`<div class="card" style="color:var(--gray-400);font-size:13px">${t}</div>`;
+  if(!buses?.length) html+=`<div class="dv"></div><div class="rt-hd"><span class="sec-lbl">지역 버스 노선</span></div>`+none('이 지역은 버스 노선 정보를 제공하지 않아요');
   if(buses?.length){
     const srcB=busReal?`<span class="ds-tag"><span class="ds-dot"></span>실제 데이터</span>`:`<span class="ds-tag mock">데모 데이터</span>`;
     html+=`<div class="dv"></div>
@@ -1037,6 +1039,7 @@ function renderTransport(buses, signals, tpData) {
   }
 
   // 신호등
+  if(!signals?.length) html+=`<div class="dv"></div><div class="rt-hd"><span class="sec-lbl">인근 횡단보도 신호</span></div>`+none('이 지역은 횡단보도 신호 정보를 제공하지 않아요');
   if(signals?.length){
     const srcS=sigReal?`<span class="ds-tag"><span class="ds-dot"></span>실제 데이터</span>`:`<span class="ds-tag mock">데모 데이터</span>`;
     html+=`<div class="dv"></div>
