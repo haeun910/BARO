@@ -6,7 +6,7 @@
 
 > 2026년 전국 통합데이터 활용 공모전 출품작 · 1인 개발
 
-🔗 **Demo:** https://mowon-guide.vercel.app
+🔗 **Demo:** https://baro-system.vercel.app/
 
 <img width="1207" height="773" alt="image" src="https://github.com/user-attachments/assets/0c4e6a19-e405-473a-9eb9-863d00fb58eb" />
 
