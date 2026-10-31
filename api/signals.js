@@ -1,5 +1,5 @@
 // api/signals.js — 교차로 정보(crsrd_map_info) + 신호 잔여시간(tl_drct_info)을 교차로 ID로 병합
-const { cors, callAll, bySido, fail } = require('./_lib');
+const { cors, callAll, cacheFor, bySido, fail } = require('./_lib');
 
 module.exports = async function handler(req, res) {
   cors(res);
@@ -21,6 +21,7 @@ module.exports = async function handler(req, res) {
       .filter(m => sigById.has(m.crsrdId))
       .map(m => ({ ...m, ...sigById.get(m.crsrdId) }));
 
+    cacheFor(res, 5); // 잔여시간은 초 단위라 짧게
     return res.status(200).json({ ok: true, items: merged });
   } catch (e) {
     return fail(res, '/api/signals', e);

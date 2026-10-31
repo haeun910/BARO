@@ -1,5 +1,5 @@
 // api/offices.js — 민원실 기본정보 (cso_info_v2)
-const { cors, callAll, bySido, hhmm, fail } = require('./_lib');
+const { cors, callAll, cacheFor, bySido, hhmm, fail } = require('./_lib');
 
 module.exports = async function handler(req, res) {
   cors(res);
@@ -8,7 +8,7 @@ module.exports = async function handler(req, res) {
   const { sido } = req.query;
   try {
     // 전국 민원실 수가 많지 않아 한 번에 받아 오고, 지역 필터·거리 정렬은 이후 단계에서 한다.
-    const { items } = await callAll('cso_v2/cso_info_v2', {}, 100, 5);
+    const { items } = await callAll('cso_v2/cso_info_v2', {}, 100, 5, 3600);
     const local = bySido(items, sido);
     const list = (local.length ? local : items).map(o => ({
       csoSn: o.csoSn,
@@ -24,6 +24,7 @@ module.exports = async function handler(req, res) {
       weekendNote: o.wkndDowExpln || ''
     })).filter(o => Number.isFinite(o.lat) && Number.isFinite(o.lng));
 
+    cacheFor(res, 3600); // 민원실 위치·운영시간은 자주 바뀌지 않음
     return res.status(200).json({ ok: true, inRegion: local.length > 0, items: list });
   } catch (e) {
     return fail(res, '/api/offices', e);
