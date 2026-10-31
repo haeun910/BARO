@@ -533,7 +533,8 @@ async function geocodeLatLng(lat, lng, cb) {
 }
 
 function addrToCd(addr) {
-  const m = {'서울':'11','부산':'26','대구':'27','인천':'28','광주':'29','대전':'30','울산':'31','세종':'36','경기':'41','강원':'42','충청북':'43','충청남':'44','전라북':'45','전라남':'46','경상북':'47','경상남':'48','제주':'50'};
+  // 법정동코드 시도 2자리 (강원·전북은 특별자치도 출범 후 51·52)
+  const m = {'서울':'11','부산':'26','대구':'27','인천':'28','광주':'29','대전':'30','울산':'31','세종':'36','경기':'41','강원':'51','충청북':'43','충북':'43','충청남':'44','충남':'44','전라북':'52','전북':'52','전라남':'46','전남':'46','경상북':'47','경북':'47','경상남':'48','경남':'48','제주':'50'};
   for (const [k,v] of Object.entries(m)) if (addr?.includes(k)) return v;
   return '11';
 }
@@ -559,15 +560,17 @@ async function loadOffices() {
   const { lat, lng, ctprvnCd } = S.loc;
 
   try {
-    const r = await fetch(`/api/offices?ctprvnCd=${ctprvnCd}&numOfRows=20`);
+    const r = await fetch(`/api/offices?sido=${ctprvnCd}`);
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     const d = await r.json();
-    const raw = d?.response?.body?.items?.item || d?.items?.item;
-    if (raw) {
-      const arr = Array.isArray(raw) ? raw : [raw];
-      if (arr.length && (arr[0]?.csoId || arr[0]?.csoNm)) {
-        processOffices(arr, lat, lng, true); return;
-      }
+    if (d.ok && d.items?.length) {
+      // 서버가 정리해 준 필드를 화면에서 쓰는 이름으로 옮긴다
+      const arr = d.items.map(o => ({
+        csoId: o.csoSn, csoNm: o.name, rdnmadr: o.address,
+        csoLa: o.lat, csoLo: o.lng, operHour: o.operHour,
+        nightOper: o.nightOper, nightNote: o.nightNote, holidayOper: o.weekendOper ? 'Y' : 'N'
+      }));
+      processOffices(arr, lat, lng, true); return;
     }
   } catch(e) { console.warn('offices API error:', e.message); }
 
@@ -654,7 +657,8 @@ function renderOffices(isReal) {
       <div class="ofc-addr">${o.rdnmadr||o.address||''}</div>
       <div class="ofc-meta">
         <span>운영: <strong>${o.operHour||'09:00~18:00'}</strong></span>
-        <span>전화: <strong>${o.telno||'-'}</strong></span>
+        ${o.telno?`<span>전화: <strong>${o.telno}</strong></span>`:''}
+        ${o.nightOper?`<span style="color:var(--blue);font-weight:500" title="${o.nightNote||''}">야간 운영</span>`:''}
         ${elev?'<span style="color:var(--green);font-weight:500">엘리베이터</span>':''}
         ${hol?'<span style="color:var(--blue);font-weight:500">공휴일 운영</span>':''}
       </div>
@@ -799,26 +803,29 @@ async function initS5() {
   let windows=null, isReal=false;
 
   try {
-    const r=await fetch(`/api/realtime?csoId=${o?.csoId||''}&numOfRows=10`);
-    if(!r.ok) throw new Error(`HTTP ${r.status}`);
-    const d=await r.json();
-    const raw=d?.response?.body?.items?.item||d?.items?.item;
-    if(raw){ windows=Array.isArray(raw)?raw:[raw]; isReal=true; }
+    if(o?._real && o?.csoId){
+      const r=await fetch(`/api/realtime?csoSn=${encodeURIComponent(o.csoId)}`);
+      if(!r.ok) throw new Error(`HTTP ${r.status}`);
+      const d=await r.json();
+      if(d.ok && d.items?.length){ windows=toWindows(d.items); isReal=true; }
+    }
   } catch(e){ console.warn('realtime API error:', e.message); }
 
   if(!windows) windows=buildMockWnd();
   renderRT(windows, isReal);
 
   S.rtInt=setInterval(()=>{
-    fetch(`/api/realtime?csoId=${o?.csoId||''}`)
+    if(!isReal){ updateWnd(buildMockWnd()); return; }
+    fetch(`/api/realtime?csoSn=${encodeURIComponent(o.csoId)}`)
       .then(r=>r.ok?r.json():null)
-      .then(d=>{
-        const raw=d?.response?.body?.items?.item||d?.items?.item;
-        if(raw) updateWnd(Array.isArray(raw)?raw:[raw]);
-        else updateWnd(buildMockWnd());
-      })
-      .catch(()=>updateWnd(buildMockWnd()));
+      .then(d=>{ if(d?.ok && d.items?.length) updateWnd(toWindows(d.items)); })
+      .catch(()=>{});
   }, 30000);
+}
+
+// 실시간 API의 업무별 대기 정보 → 창구 카드 형식
+function toWindows(items) {
+  return items.map(w=>({ wndwNo:`${w.taskNo}번 업무`, wndwType:w.taskName||'민원', waitPerson:w.waiting, status:'운영중' }));
 }
 
 function buildMockWnd() {
@@ -918,9 +925,9 @@ async function initS6() {
 
   const cd=S.loc?.ctprvnCd||'11';
   const [buses, signals, transport] = await Promise.all([
-    fetch(`/api/buses?ctprvnCd=${cd}&numOfRows=10`).then(r=>r.ok?r.json():null).catch(()=>null),
-    fetch(`/api/signals?ctprvnCd=${cd}`).then(r=>r.ok?r.json():null).catch(()=>null),
-    fetch(`/api/transport?ctprvnCd=${cd}&numOfRows=3`).then(r=>r.ok?r.json():null).catch(()=>null),
+    fetch(`/api/buses?sido=${cd}`).then(r=>r.ok?r.json():null).catch(()=>null),
+    fetch(`/api/signals?sido=${cd}`).then(r=>r.ok?r.json():null).catch(()=>null),
+    fetch(`/api/transport?sido=${cd}`).then(r=>r.ok?r.json():null).catch(()=>null),
   ]);
 
   const busArr  = parseBuses(buses);
@@ -932,17 +939,17 @@ async function initS6() {
 
 function parseBuses(d) {
   if(!d) return buildMockBus();
-  const raw=d?.response?.body?.items?.item||d?.items?.item;
-  if(!raw) return buildMockBus();
-  const arr=Array.isArray(raw)?raw:[raw];
-  if(!arr.length||!arr[0]?.routeId) return buildMockBus();
-  return arr.slice(0,3).map(b=>({
-    routeNo:   b.routeNo||b.routeNm||'노선',
-    routeType: b.routeTypeCd||b.routeType||'일반',
-    startStop: b.startStopNm||b.startNm||'현재 위치',
-    endStop:   b.endStopNm||b.endNm||(S.office?.csoNm||'민원실'),
-    arrMin:    Math.floor(Math.random()*10)+2,
-    stops:     Math.floor(Math.random()*5)+1,
+  if(!d.ok||!d.items?.length) return buildMockBus();
+  // 노선 기본정보에는 도착 예정 시간이 없으므로 기점·종점과 첫차·막차를 보여 준다
+  const t=v=>v?`${String(v).padStart(4,'0').slice(0,2)}:${String(v).padStart(4,'0').slice(2,4)}`:'';
+  return d.items.slice(0,3).map(b=>({
+    routeNo:   b.routeNo||'노선',
+    routeType: b.routeType||'일반',
+    startStop: b.start||'',
+    endStop:   b.end||'',
+    hours:     b.firstBus?`첫차 ${t(b.firstBus)} · 막차 ${t(b.lastBus)}`:'',
+    arrMin:    null,
+    stops:     null,
     _real:     true
   }));
 }
@@ -958,10 +965,8 @@ function buildMockBus() {
 
 function parseSignals(d) {
   if(!d) return buildMockSig();
-  const items=d?.items||d?.response?.body?.items?.item||d?.items?.item;
-  if(!items) return buildMockSig();
-  const arr=Array.isArray(items)?items:[items];
-  if(!arr.length) return buildMockSig();
+  if(!d.ok||!d.items?.length) return buildMockSig();
+  const arr=d.items;
   return arr.slice(0,4).map(s=>({
     name: s.crsrdNm||s.crossNm||s.crsrdId||'교차로',
     remaining: parseInt(s.pdrsnSignRmdrTime||s.bsSignRmdrTime||Math.floor(Math.random()*45)+5),
@@ -1005,17 +1010,19 @@ function renderTransport(buses, signals, tpData) {
   if(buses?.length){
     const srcB=busReal?`<span class="ds-tag"><span class="ds-dot"></span>실제 데이터</span>`:`<span class="ds-tag mock">데모 데이터</span>`;
     html+=`<div class="dv"></div>
-      <div class="rt-hd"><span class="sec-lbl">버스 실시간 도착정보</span>${srcB}<div class="rt-bdg"><div class="rt-dot"></div>실시간</div></div>`;
+      <div class="rt-hd"><span class="sec-lbl">${busReal?'지역 버스 노선':'버스 실시간 도착정보'}</span>${srcB}${busReal?'':'<div class="rt-bdg"><div class="rt-dot"></div>실시간</div>'}</div>`;
     buses.forEach(b=>{
       const col=b.routeType?.includes('지하철')?'#2D4B8E':b.routeType?.includes('간선')?'var(--navy)':'#2B6CB0';
       const k='bt_'+encodeURIComponent(b.routeNo);
       html+=`<div class="bus">
         <div class="bus-no" style="background:${col}">${b.routeNo}</div>
         <div class="bus-i"><div class="t">${b.startStop}</div><div class="s">${b.endStop}${b.stops?` · ${b.stops}정거장`:''}</div></div>
-        <div class="bus-a"><div class="time" id="${k}">약 ${b.arrMin}분</div><div class="unit">후 도착</div></div>
+        ${b.arrMin!=null
+          ? `<div class="bus-a"><div class="time" id="${k}">약 ${b.arrMin}분</div><div class="unit">후 도착</div></div>`
+          : `<div class="bus-a"><div class="unit">${b.hours||''}</div></div>`}
       </div>`;
     });
-    startBusCD(buses);
+    if(!busReal) startBusCD(buses);
   }
 
   // 신호등

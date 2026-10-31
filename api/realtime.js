@@ -1,39 +1,25 @@
-// api/realtime.js — 민원실 창구별 실시간 대기현황 프록시
+// api/realtime.js — 민원실 업무별 실시간 대기 현황 (cso_realtime_v2)
+const { cors, callApi, fail } = require('./_lib');
+
 module.exports = async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  cors(res);
   if (req.method === 'OPTIONS') return res.status(200).end();
 
-  const API_KEY = process.env.DATA_API_KEY;
-  if (!API_KEY) return res.status(500).json({ error: 'API key not configured' });
-
-  const { csoId, pageNo = 1, numOfRows = 20 } = req.query;
+  const { csoSn } = req.query;
+  if (!csoSn) return res.status(400).json({ ok: false, error: 'csoSn required' });
 
   try {
-    let url =
-      `https://apis.data.go.kr/B551982/cso_v2/cso_realtime_v2` +
-      `?serviceKey=${encodeURIComponent(API_KEY)}` +
-      `&pageNo=${pageNo}` +
-      `&numOfRows=${numOfRows}` +
-      `&type=json`;
-
-    if (csoId) url += `&csoId=${csoId}`;
-
-    const upstream = await fetch(url, {
-      headers: { Accept: 'application/json' },
-      signal: AbortSignal.timeout(30000)
-    });
-
-    if (!upstream.ok) throw new Error(`upstream ${upstream.status}`);
-
-    const data = await upstream.json();
-
-    const code = data?.response?.header?.resultCode;
-    if (code && code !== '00') throw new Error(data?.response?.header?.resultMsg || 'API Error');
-
-    return res.status(200).json(data);
+    const { items } = await callApi('cso_v2/cso_realtime_v2', { pageNo: 1, numOfRows: 500 });
+    const list = items
+      .filter(w => w.csoSn === csoSn)
+      .map(w => ({
+        taskNo: w.taskNo,
+        taskName: w.taskNm,
+        waiting: Number(w.wtngCnt) || 0,
+        updatedAt: w.totDt
+      }));
+    return res.status(200).json({ ok: true, items: list });
   } catch (e) {
-    console.error('[/api/realtime]', e.message);
-    return res.status(502).json({ error: e.message });
+    return fail(res, '/api/realtime', e);
   }
 };
