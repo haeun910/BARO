@@ -1,5 +1,5 @@
 // api/realtime.js — 민원실 업무별 실시간 대기 현황 (cso_realtime_v2)
-const { cors, callApi, fail } = require('./_lib');
+const { cors, callAll, fail } = require('./_lib');
 
 module.exports = async function handler(req, res) {
   cors(res);
@@ -9,7 +9,8 @@ module.exports = async function handler(req, res) {
   if (!csoSn) return res.status(400).json({ ok: false, error: 'csoSn required' });
 
   try {
-    const { items } = await callApi('cso_v2/cso_realtime_v2', { pageNo: 1, numOfRows: 500 });
+    // 한 페이지 최대 건수가 제한될 수 있어 100건씩 넘겨 가며 모은다
+    const { items } = await callAll('cso_v2/cso_realtime_v2', {}, 100, 10);
     const list = items
       .filter(w => w.csoSn === csoSn)
       .map(w => ({

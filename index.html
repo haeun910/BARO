@@ -485,7 +485,7 @@ function initS3() {
   let geoResolved = false;
   const fallback = () => {
     if (geoResolved) return; geoResolved = true;
-    S.loc = { lat:DEF.lat, lng:DEF.lng, addr:'서울특별시 중구', ctprvnCd:'11' };
+    S.loc = { lat:DEF.lat, lng:DEF.lng, addr:'서울특별시 중구', ctprvnCd:'11', fallback:true };
     loadOffices();
   };
   const geoTimeout = setTimeout(fallback, 8000);
@@ -640,6 +640,8 @@ function renderOffices(isReal) {
 
   let html = `<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
     <span class="sec-lbl">주변 민원실</span>${srcBadge}</div>`;
+  if (S.loc?.fallback) html += `<div class="note"><strong>📍 현재 위치를 가져오지 못했어요.</strong>&nbsp;서울 중구 기준으로 보여 드려요. 위치 권한을 허용하거나 '주소 직접 입력'을 이용해 주세요.</div>`;
+  if (isReal) html += `<div style="font-size:11px;color:var(--gray-400);margin:-4px 0 10px">실시간 대기 정보를 제공하는 민원실 기준</div>`;
 
   sorted.forEach((o,i) => {
     const open=isOpen(o.operHour||o.operTime);
@@ -760,7 +762,7 @@ function renderAI(r) {
   const methods=[];
   if(r.online)  methods.push({lbl:'온라인',   tt:'정부24 온라인 처리',     ds:'24시간 인터넷 발급 · 수수료 50% 할인 · 대기 없음',              rec:r.recommendation?.includes('온라인')});
   if(r.kiosk)   methods.push({lbl:'무인기기',  tt:'무인민원발급기 이용',    ds:'가까운 편의점·지하철역·주민센터 24시간 운영',                     rec:r.recommendation?.includes('무인')});
-  methods.push({lbl:'방문', tt:`${o?.csoNm||'민원실'} 방문`, ds:`${o?.operHour||'09:00~18:00'} · 전화: ${o?.telno||'-'}`, rec:r.recommendation?.includes('방문')});
+  methods.push({lbl:'방문', tt:`${o?.csoNm||'민원실'} 방문`, ds:`${o?.operHour||'09:00~18:00'}${o?.telno?` · 전화: ${o.telno}`:''}`, rec:r.recommendation?.includes('방문')});
   methods.sort((a,b)=>(b.rec?1:0)-(a.rec?1:0));
 
   const html=`
@@ -808,7 +810,7 @@ async function initS5() {
       const r=await fetch(`/api/realtime?csoSn=${encodeURIComponent(o.csoId)}`);
       if(!r.ok) throw new Error(`HTTP ${r.status}`);
       const d=await r.json();
-      if(d.ok && d.items?.length){ windows=toWindows(d.items); isReal=true; }
+      if(d.ok){ windows=toWindows(d.items||[]); isReal=true; }  // 빈 목록이면 '정보 없음'으로 표시
     }
   } catch(e){ console.warn('realtime API error:', e.message); }
 
@@ -858,8 +860,9 @@ function renderRT(windows, isReal) {
   const o=S.office, open=isOpen(o?.operHour);
   if (!open) windows = windows.map(w => ({ ...w, waitPerson:0, waitCount:0, status:'운영종료' }));
   const total=windows.reduce((s,w)=>s+(w.waitPerson||w.waitCount||0),0);
-  const bCls=total>15?'bdg-r':total>7?'bdg-y':'bdg-g';
-  const bLbl=total>15?'혼잡':total>7?'보통':'여유';
+  const noData=isReal&&!windows.length;
+  const bCls=noData?'bdg-b':total>15?'bdg-r':total>7?'bdg-y':'bdg-g';
+  const bLbl=noData?'정보 없음':total>15?'혼잡':total>7?'보통':'여유';
   const now=new Date().toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});
   const srcBadge=isReal?`<span class="ds-tag"><span class="ds-dot"></span>실제 데이터</span>`:`<span class="ds-tag mock">데모 데이터</span>`;
 
@@ -871,10 +874,10 @@ function renderRT(windows, isReal) {
         <span class="bdg ${open?bCls:'bdg-r'}">${open?bLbl:'운영 종료'}</span>
       </div>
       <div class="ir"><span class="lb">운영시간</span>${o?.operHour||'09:00 ~ 18:00'}</div>
-      <div class="ir"><span class="lb">연락처</span><a href="tel:${o?.telno}">${o?.telno||'-'}</a></div>
+      ${o?.telno?`<div class="ir"><span class="lb">연락처</span><a href="tel:${o.telno}">${o.telno}</a></div>`:''}
       <div class="ir"><span class="lb">주소</span>${o?.rdnmadr||'-'}</div>
       <div class="ir"><span class="lb">총 대기</span>
-        <strong style="color:${!open?'var(--gray-400)':total>10?'var(--red)':'var(--green)'};font-size:15px">${open?'현재 '+total+'명 대기':'대기 없음 (운영 종료)'}</strong>
+        <strong style="color:${!open||noData?'var(--gray-400)':total>10?'var(--red)':'var(--green)'};font-size:15px">${noData?'이 민원실은 실시간 대기 정보를 제공하지 않아요':open?'현재 '+total+'명 대기':'대기 없음 (운영 종료)'}</strong>
       </div>
     </div>`;
 
