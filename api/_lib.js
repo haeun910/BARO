@@ -37,16 +37,29 @@ async function callApi(path, params = {}) {
   return { items, totalCount: Number(root?.body?.totalCount || items.length) };
 }
 
-// 전체 건수만큼 페이지를 넘기며 모은다 (최대 maxPages 페이지)
-async function callAll(path, params = {}, rows = 1000, maxPages = 5) {
+// 서버 인스턴스 메모리 캐시: 같은 요청이 TTL 안에 다시 오면 공공 API를 다시 부르지 않는다
+const memo = new Map();
+
+// 전체 건수만큼 페이지를 모은다. 첫 페이지로 전체 건수를 알아낸 뒤 나머지 페이지는 동시에 요청한다.
+async function callAll(path, params = {}, rows = 1000, maxPages = 5, ttlSec = 0) {
+  const key = `${path}?${new URLSearchParams(params)}&rows=${rows}`;
+  const hit = memo.get(key);
+  if (ttlSec && hit && hit.exp > Date.now()) return hit.value;
+
   const first = await callApi(path, { ...params, pageNo: 1, numOfRows: rows });
-  let items = first.items;
   const pages = Math.min(maxPages, Math.ceil(first.totalCount / rows));
-  for (let p = 2; p <= pages; p++) {
-    const next = await callApi(path, { ...params, pageNo: p, numOfRows: rows });
-    items = items.concat(next.items);
-  }
-  return { items, totalCount: first.totalCount };
+  const rest = await Promise.all(
+    Array.from({ length: Math.max(0, pages - 1) }, (_, i) =>
+      callApi(path, { ...params, pageNo: i + 2, numOfRows: rows }))
+  );
+  const value = { items: first.items.concat(...rest.map(r => r.items)), totalCount: first.totalCount };
+  if (ttlSec) memo.set(key, { value, exp: Date.now() + ttlSec * 1000 });
+  return value;
+}
+
+// 성공 응답만 Vercel CDN에 캐싱 (s-maxage 동안은 함수 실행 없이 CDN이 바로 응답)
+function cacheFor(res, sec) {
+  res.setHeader('Cache-Control', `public, s-maxage=${sec}, stale-while-revalidate=${sec * 4}`);
 }
 
 // 법정동코드(stdgCd, 10자리)의 앞 2자리가 시도 코드. 시도 코드가 주어지면 그 지역만 남긴다.
@@ -66,4 +79,4 @@ function fail(res, where, e) {
   return res.status(502).json({ ok: false, error: e.message });
 }
 
-module.exports = { cors, callApi, callAll, bySido, hhmm, fail };
+module.exports = { cors, callApi, callAll, cacheFor, bySido, hhmm, fail };

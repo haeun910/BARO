@@ -1,5 +1,5 @@
 // api/realtime.js — 민원실 업무별 실시간 대기 현황 (cso_realtime_v2)
-const { cors, callApi, fail } = require('./_lib');
+const { cors, callAll, cacheFor, fail } = require('./_lib');
 
 module.exports = async function handler(req, res) {
   cors(res);
@@ -9,7 +9,8 @@ module.exports = async function handler(req, res) {
   if (!csoSn) return res.status(400).json({ ok: false, error: 'csoSn required' });
 
   try {
-    const { items } = await callApi('cso_v2/cso_realtime_v2', { pageNo: 1, numOfRows: 500 });
+    // 한 페이지 최대 건수가 제한될 수 있어 100건씩 넘겨 가며 모은다
+    const { items } = await callAll('cso_v2/cso_realtime_v2', {}, 100, 10, 10);
     const list = items
       .filter(w => w.csoSn === csoSn)
       .map(w => ({
@@ -18,6 +19,7 @@ module.exports = async function handler(req, res) {
         waiting: Number(w.wtngCnt) || 0,
         updatedAt: w.totDt
       }));
+    cacheFor(res, 10); // 화면은 30초마다 갱신하므로 10초 캐시는 신선도에 영향 없음
     return res.status(200).json({ ok: true, items: list });
   } catch (e) {
     return fail(res, '/api/realtime', e);

@@ -485,7 +485,7 @@ function initS3() {
   let geoResolved = false;
   const fallback = () => {
     if (geoResolved) return; geoResolved = true;
-    S.loc = { lat:DEF.lat, lng:DEF.lng, addr:'서울특별시 중구', ctprvnCd:'11' };
+    S.loc = { lat:DEF.lat, lng:DEF.lng, addr:'서울특별시 중구', ctprvnCd:'11', fallback:true };
     loadOffices();
   };
   const geoTimeout = setTimeout(fallback, 8000);
@@ -640,6 +640,8 @@ function renderOffices(isReal) {
 
   let html = `<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
     <span class="sec-lbl">주변 민원실</span>${srcBadge}</div>`;
+  if (S.loc?.fallback) html += `<div class="note"><strong>📍 현재 위치를 가져오지 못했어요.</strong>&nbsp;서울 중구 기준으로 보여 드려요. 위치 권한을 허용하거나 '주소 직접 입력'을 이용해 주세요.</div>`;
+  if (isReal) html += `<div style="font-size:11px;color:var(--gray-400);margin:-4px 0 10px">실시간 대기 정보를 제공하는 민원실 기준</div>`;
 
   sorted.forEach((o,i) => {
     const open=isOpen(o.operHour||o.operTime);
@@ -760,7 +762,7 @@ function renderAI(r) {
   const methods=[];
   if(r.online)  methods.push({lbl:'온라인',   tt:'정부24 온라인 처리',     ds:'24시간 인터넷 발급 · 수수료 50% 할인 · 대기 없음',              rec:r.recommendation?.includes('온라인')});
   if(r.kiosk)   methods.push({lbl:'무인기기',  tt:'무인민원발급기 이용',    ds:'가까운 편의점·지하철역·주민센터 24시간 운영',                     rec:r.recommendation?.includes('무인')});
-  methods.push({lbl:'방문', tt:`${o?.csoNm||'민원실'} 방문`, ds:`${o?.operHour||'09:00~18:00'} · 전화: ${o?.telno||'-'}`, rec:r.recommendation?.includes('방문')});
+  methods.push({lbl:'방문', tt:`${o?.csoNm||'민원실'} 방문`, ds:`${o?.operHour||'09:00~18:00'}${o?.telno?` · 전화: ${o.telno}`:''}`, rec:r.recommendation?.includes('방문')});
   methods.sort((a,b)=>(b.rec?1:0)-(a.rec?1:0));
 
   const html=`
@@ -808,11 +810,12 @@ async function initS5() {
       const r=await fetch(`/api/realtime?csoSn=${encodeURIComponent(o.csoId)}`);
       if(!r.ok) throw new Error(`HTTP ${r.status}`);
       const d=await r.json();
-      if(d.ok && d.items?.length){ windows=toWindows(d.items); isReal=true; }
+      if(d.ok){ windows=toWindows(d.items||[]); isReal=true; }  // 빈 목록이면 '정보 없음'으로 표시
     }
   } catch(e){ console.warn('realtime API error:', e.message); }
 
   if(!windows) windows=buildMockWnd();
+  let shownWnd=windows.length>0;
   renderRT(windows, isReal);
 
   S.rtInt=setInterval(()=>{
@@ -822,8 +825,9 @@ async function initS5() {
       .then(d=>{
         if(!(d?.ok && d.items?.length)) return;
         const w=toWindows(d.items);
-        if(isReal) updateWnd(w);
-        else { isReal=true; renderRT(w, true); }  // 처음엔 실패했지만 재시도에서 받아 오면 실제 데이터로 전환
+        // 창구 카드가 이미 있으면 숫자만 갱신, 없었으면(처음 실패했거나 빈 목록) 다시 그린다
+        if(isReal && shownWnd) updateWnd(w);
+        else { isReal=true; shownWnd=true; renderRT(w, true); }
       })
       .catch(()=>{});
   }, 30000);
@@ -858,8 +862,9 @@ function renderRT(windows, isReal) {
   const o=S.office, open=isOpen(o?.operHour);
   if (!open) windows = windows.map(w => ({ ...w, waitPerson:0, waitCount:0, status:'운영종료' }));
   const total=windows.reduce((s,w)=>s+(w.waitPerson||w.waitCount||0),0);
-  const bCls=total>15?'bdg-r':total>7?'bdg-y':'bdg-g';
-  const bLbl=total>15?'혼잡':total>7?'보통':'여유';
+  const noData=isReal&&!windows.length;
+  const bCls=noData?'bdg-b':total>15?'bdg-r':total>7?'bdg-y':'bdg-g';
+  const bLbl=noData?'정보 없음':total>15?'혼잡':total>7?'보통':'여유';
   const now=new Date().toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});
   const srcBadge=isReal?`<span class="ds-tag"><span class="ds-dot"></span>실제 데이터</span>`:`<span class="ds-tag mock">데모 데이터</span>`;
 
@@ -871,10 +876,10 @@ function renderRT(windows, isReal) {
         <span class="bdg ${open?bCls:'bdg-r'}">${open?bLbl:'운영 종료'}</span>
       </div>
       <div class="ir"><span class="lb">운영시간</span>${o?.operHour||'09:00 ~ 18:00'}</div>
-      <div class="ir"><span class="lb">연락처</span><a href="tel:${o?.telno}">${o?.telno||'-'}</a></div>
+      ${o?.telno?`<div class="ir"><span class="lb">연락처</span><a href="tel:${o.telno}">${o.telno}</a></div>`:''}
       <div class="ir"><span class="lb">주소</span>${o?.rdnmadr||'-'}</div>
       <div class="ir"><span class="lb">총 대기</span>
-        <strong style="color:${!open?'var(--gray-400)':total>10?'var(--red)':'var(--green)'};font-size:15px">${open?'현재 '+total+'명 대기':'대기 없음 (운영 종료)'}</strong>
+        <strong style="color:${!open||noData?'var(--gray-400)':total>10?'var(--red)':'var(--green)'};font-size:15px">${noData?'이 민원실은 실시간 대기 정보를 제공하지 않아요':open?'현재 '+total+'명 대기':'대기 없음 (운영 종료)'}</strong>
       </div>
     </div>`;
 
@@ -944,8 +949,8 @@ async function initS6() {
 }
 
 function parseBuses(d) {
-  if(!d) return buildMockBus();
-  if(!d.ok||!d.items?.length) return buildMockBus();
+  // 데이터가 없으면 데모 대신 빈 목록 → 화면에 '정보 없음' 표시
+  if(!d?.ok||!d.items?.length) return [];
   // 노선 기본정보에는 도착 예정 시간이 없으므로 기점·종점과 첫차·막차를 보여 준다
   const t=v=>v?`${String(v).padStart(4,'0').slice(0,2)}:${String(v).padStart(4,'0').slice(2,4)}`:'';
   return d.items.slice(0,3).map(b=>({
@@ -970,12 +975,12 @@ function buildMockBus() {
 }
 
 function parseSignals(d) {
-  if(!d) return buildMockSig();
-  if(!d.ok||!d.items?.length) return buildMockSig();
-  const arr=d.items;
+  if(!d?.ok||!d.items?.length) return [];
+  // 잔여시간 값이 있는 교차로만 표시 (임의 숫자로 채우지 않음)
+  const arr=d.items.filter(s=>s.pdrsnSignRmdrTime!=null||s.bsSignRmdrTime!=null);
   return arr.slice(0,4).map(s=>({
     name: s.crsrdNm||s.crossNm||s.crsrdId||'교차로',
-    remaining: parseInt(s.pdrsnSignRmdrTime||s.bsSignRmdrTime||Math.floor(Math.random()*45)+5),
+    remaining: parseInt(s.pdrsnSignRmdrTime??s.bsSignRmdrTime),
     isGreen: (s.pdrsnSignSttusNm||'').includes('보행')||(s.pdrsnSignSttusNm||'').includes('녹'),
     _real: true
   }));
@@ -996,7 +1001,7 @@ function renderTransport(buses, signals, tpData) {
 
   const methods=[];
   methods.push({lbl:'도보', tt:`도보 이동 (약 ${wMin}분)`,  ds:`현재 위치에서 약 ${d}km · <a href="javascript:openKakao()" style="color:var(--blue)">지도 길찾기</a>`, rec:d<0.6});
-  if(buses?.length) methods.push({lbl:'버스', tt:`버스 이용 (${buses[0].routeNo}번)`, ds:`${buses[0].startStop} 탑승 → ${buses[0].endStop}`, rec:d>=0.6&&d<3});
+  methods.push({lbl:'대중교통', tt:'버스·지하철 이용', ds:`<a href="javascript:openKakao()" style="color:var(--blue)">지도에서 경로 확인</a>`, rec:d>=0.6});
   if(needAccess){
     const center=tpData?.centers?.[0];
     methods.push({lbl:'교통약자', tt:'교통약자 이동지원 택시', ds:center?`${center.centerNm||'이동지원센터'} · ${center.telNo||center.centerTelno||'지역 센터 문의'}`:'지역 교통약자이동지원센터 예약 신청', rec:ut==='장애인'});
@@ -1013,6 +1018,8 @@ function renderTransport(buses, signals, tpData) {
   </div>`;
 
   // 버스 실시간
+  const none=(t)=>`<div class="card" style="color:var(--gray-400);font-size:13px">${t}</div>`;
+  if(!buses?.length) html+=`<div class="dv"></div><div class="rt-hd"><span class="sec-lbl">지역 버스 노선</span></div>`+none('이 지역은 버스 노선 정보를 제공하지 않아요');
   if(buses?.length){
     const srcB=busReal?`<span class="ds-tag"><span class="ds-dot"></span>실제 데이터</span>`:`<span class="ds-tag mock">데모 데이터</span>`;
     html+=`<div class="dv"></div>
@@ -1032,6 +1039,7 @@ function renderTransport(buses, signals, tpData) {
   }
 
   // 신호등
+  if(!signals?.length) html+=`<div class="dv"></div><div class="rt-hd"><span class="sec-lbl">인근 횡단보도 신호</span></div>`+none('이 지역은 횡단보도 신호 정보를 제공하지 않아요');
   if(signals?.length){
     const srcS=sigReal?`<span class="ds-tag"><span class="ds-dot"></span>실제 데이터</span>`:`<span class="ds-tag mock">데모 데이터</span>`;
     html+=`<div class="dv"></div>
