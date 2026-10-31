@@ -568,7 +568,7 @@ async function loadOffices() {
       const arr = d.items.map(o => ({
         csoId: o.csoSn, csoNm: o.name, rdnmadr: o.address,
         csoLa: o.lat, csoLo: o.lng, operHour: o.operHour,
-        nightOper: o.nightOper, nightNote: o.nightNote, holidayOper: o.weekendOper ? 'Y' : 'N'
+        nightOper: o.nightOper, nightNote: o.nightNote, weekendOper: o.weekendOper, weekendNote: o.weekendNote
       }));
       processOffices(arr, lat, lng, true); return;
     }
@@ -661,6 +661,7 @@ function renderOffices(isReal) {
         ${o.nightOper?`<span style="color:var(--blue);font-weight:500" title="${o.nightNote||''}">야간 운영</span>`:''}
         ${elev?'<span style="color:var(--green);font-weight:500">엘리베이터</span>':''}
         ${hol?'<span style="color:var(--blue);font-weight:500">공휴일 운영</span>':''}
+        ${o.weekendOper?`<span style="color:var(--blue);font-weight:500" title="${o.weekendNote||''}">주말 운영</span>`:''}
       </div>
       <div class="ofc-tags">
         <span class="bdg ${open?'bdg-g':'bdg-r'}">${open?'운영 중':'운영 종료'}</span>
@@ -815,10 +816,15 @@ async function initS5() {
   renderRT(windows, isReal);
 
   S.rtInt=setInterval(()=>{
-    if(!isReal){ updateWnd(buildMockWnd()); return; }
+    if(!(o?._real && o?.csoId)){ updateWnd(buildMockWnd()); return; }
     fetch(`/api/realtime?csoSn=${encodeURIComponent(o.csoId)}`)
       .then(r=>r.ok?r.json():null)
-      .then(d=>{ if(d?.ok && d.items?.length) updateWnd(toWindows(d.items)); })
+      .then(d=>{
+        if(!(d?.ok && d.items?.length)) return;
+        const w=toWindows(d.items);
+        if(isReal) updateWnd(w);
+        else { isReal=true; renderRT(w, true); }  // 처음엔 실패했지만 재시도에서 받아 오면 실제 데이터로 전환
+      })
       .catch(()=>{});
   }, 30000);
 }
@@ -1143,8 +1149,8 @@ function searchByAddr() {
   const cdToName = {
     '11':'서울특별시','26':'부산광역시','27':'대구광역시','28':'인천광역시',
     '29':'광주광역시','30':'대전광역시','31':'울산광역시','36':'세종특별자치시',
-    '41':'경기도','42':'강원도','43':'충청북도','44':'충청남도',
-    '45':'전라북도','46':'전라남도','47':'경상북도','48':'경상남도','50':'제주특별자치도'
+    '41':'경기도','42':'강원도','51':'강원특별자치도','43':'충청북도','44':'충청남도',
+    '45':'전라북도','52':'전북특별자치도','46':'전라남도','47':'경상북도','48':'경상남도','50':'제주특별자치도'
   };
   const regionName = cdToName[ctprvnCd] || raw;
 
@@ -1154,9 +1160,9 @@ function searchByAddr() {
     '27':{lat:35.8714,lng:128.6014}, '28':{lat:37.4563,lng:126.7052},
     '29':{lat:35.1595,lng:126.8526}, '30':{lat:36.3504,lng:127.3845},
     '31':{lat:35.5384,lng:129.3114}, '36':{lat:36.4801,lng:127.2890},
-    '41':{lat:37.4138,lng:127.5183}, '42':{lat:37.8228,lng:128.1555},
+    '41':{lat:37.4138,lng:127.5183}, '42':{lat:37.8228,lng:128.1555}, '51':{lat:37.8228,lng:128.1555},
     '43':{lat:36.6357,lng:127.4917}, '44':{lat:36.6588,lng:126.6728},
-    '45':{lat:35.7175,lng:127.1530}, '46':{lat:34.8679,lng:126.9910},
+    '45':{lat:35.7175,lng:127.1530}, '52':{lat:35.7175,lng:127.1530}, '46':{lat:34.8679,lng:126.9910},
     '47':{lat:36.4919,lng:128.8889}, '48':{lat:35.4606,lng:128.2132},
     '50':{lat:33.4890,lng:126.4983}
   };
